@@ -12,7 +12,6 @@ const TOTAL_PAGES_CHILD = 7;
 // Modèles explicitement autorisés pour cette version.
 // À vérifier régulièrement dans les pages tarifaires et de modèles officielles.
 const GROQ_FREE_ALLOWLIST = new Set(["openai/gpt-oss-20b"]);
-const GEMINI_FREE_ALLOWLIST = new Set(["gemini-2.5-flash"]);
 
 const MAX_BODY_CHARS = 40000;
 
@@ -246,7 +245,7 @@ Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la
 {"paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
 }
 
-function buildUserPrompt(input, plan) {
+function buildUserPrompt(input, plan, maxPages = 3) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
   const memo = String(input.memo || "").slice(0, 1000);
@@ -254,7 +253,7 @@ function buildUserPrompt(input, plan) {
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
 
-  const history = Array.isArray(input.history) ? input.history.slice(-3) : [];
+  const history = Array.isArray(input.history) ? input.history.slice(-maxPages) : [];
   const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
 
   const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}`;
@@ -400,40 +399,36 @@ async function callGroq(env, prompts, isEnd) {
   if (!response.ok) {
     const error = new Error(`Groq HTTP ${response.status}`);
     error.status = response.status;
+    // Groq indique combien de temps attendre avant que le quota se libère.
+    error.retryAfter = retryAfterSeconds(response.headers);
     throw error;
   }
   const data = await response.json();
   return parseOutput(data.choices?.[0]?.message?.content || "", isEnd);
 }
 
-async function callGemini(env, prompts, isEnd) {
-  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
-  if (!GEMINI_FREE_ALLOWLIST.has(model)) throw new Error("Modèle Gemini non autorisé par la liste gratuite.");
-  if (env.GEMINI_FREE_CONFIRMED !== "YES_I_CONFIRMED_NO_BILLING") {
-    throw new Error("Gemini désactivé : confirme d'abord que le projet n'a aucune facturation active.");
-  }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: prompts.system }] },
-      contents: [{ role: "user", parts: [{ text: prompts.user }] }],
-      generationConfig: {
-        responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 2500,
-        // Sans « réflexion » préalable : réponse beaucoup plus rapide.
-        thinkingConfig: { thinkingBudget: 0 }
-      }
-    })
-  });
-  if (!response.ok) {
-    const error = new Error(`Gemini HTTP ${response.status}`);
-    error.status = response.status;
-    throw error;
-  }
-  const data = await response.json();
-  return parseOutput(data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "", isEnd);
+// Lit le délai d'attente renvoyé par Groq : « retry-after » (secondes) ou
+// « x-ratelimit-reset-tokens » / « x-ratelimit-reset-requests » (ex. « 7.66s », « 1m2s », « 450ms »).
+function retryAfterSeconds(headers) {
+  const direct = Number.parseFloat(headers.get("retry-after"));
+  if (Number.isFinite(direct)) return Math.max(direct, 0.5);
+  const values = ["x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"]
+    .map(name => parseDuration(headers.get(name)))
+    .filter(v => v !== null);
+  return values.length ? Math.max(...values, 0.5) : null;
 }
+
+function parseDuration(text) {
+  if (!text) return null;
+  let total = 0, found = false;
+  for (const [, num, unit] of String(text).matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)) {
+    found = true;
+    total += Number(num) * ({ ms: 0.001, s: 1, m: 60, h: 3600 })[unit];
+  }
+  return found ? total : null;
+}
+
+const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
 // Secours : si le modèle n'a pas fourni de titre, on en demande un à part, à partir du passage.
 async function requestTitle(env, category, page, memo) {
@@ -476,7 +471,7 @@ export default {
     if (url.pathname === "/health") return json({ ok: true, freeOnly: env.FREE_ONLY === "true" });
     if (url.pathname !== "/api/story" || request.method !== "POST") return json({ error: "Not found" }, 404);
     if (env.FREE_ONLY !== "true") return json({ error: "Génération bloquée : le mode gratuit strict n'est pas activé." }, 503);
-    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: "Aucun fournisseur IA n'est configuré." }, 503);
+    if (!env.GROQ_API_KEY) return json({ error: "Aucune clé Groq n'est configurée." }, 503);
 
     let input;
     try { input = await request.json(); } catch { return json({ error: "Requête JSON invalide." }, 400); }
@@ -484,31 +479,41 @@ export default {
     if (JSON.stringify(input).length > MAX_BODY_CHARS) return json({ error: "Contexte trop volumineux." }, 413);
 
     const plan = planPage(input);
-    const prompts = { system: buildSystemPrompt(input, plan), user: buildUserPrompt(input, plan) };
+    const system = buildSystemPrompt(input, plan);
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
     const errors = [];
 
-    if (env.GROQ_API_KEY) {
+    // Le Worker réessaie lui-même, au plus juste, avant de rendre la main au navigateur :
+    // - quota dépassé (429) : il attend exactement le délai indiqué par Groq, s'il est court ;
+    // - requête trop grosse (413) : il réessaie aussitôt avec une page d'historique en moins ;
+    // - réponse mal formée : il réessaie aussitôt.
+    let maxPages = 3;
+    let waited = 0;
+    let lastError = null;
+    for (let attempt = 1; attempt <= 4; attempt++) {
       try {
+        const prompts = { system, user: buildUserPrompt(input, plan, maxPages) };
         const result = await callGroq(env, prompts, plan.isEnd);
         return withTitle(env, input, result, meta, "Groq");
       } catch (e) {
+        lastError = e;
         errors.push(`Groq: ${e.message}`);
-        // Bascule uniquement en cas de quota, indisponibilité temporaire ou réponse mal formée.
-        if (![413, 429, 500, 502, 503, 504, undefined].includes(e.status)) {
-          return json({ error: "Le fournisseur principal a refusé la requête. Aucun autre fournisseur n'a été appelé.", details: errors }, 503);
+        if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
+        if (e.status === 429 && e.retryAfter !== null && e.retryAfter <= 12 && waited + e.retryAfter <= 20) {
+          await sleep(e.retryAfter + 0.3);
+          waited += e.retryAfter + 0.3;
+          continue;
         }
+        if (e.status === undefined && attempt < 3) continue;
+        break;
       }
     }
-
-    if (env.GEMINI_API_KEY && env.GEMINI_FREE_CONFIRMED === "YES_I_CONFIRMED_NO_BILLING") {
-      try {
-        const result = await callGemini(env, prompts, plan.isEnd);
-        return withTitle(env, input, result, meta, "Gemini");
-      } catch (e) {
-        errors.push(`Gemini: ${e.message}`);
-      }
-    }
-    return json({ error: "Les moteurs gratuits sont temporairement indisponibles. Aucune génération payante n'a été tentée.", details: errors }, 503);
+    const quota = [413, 429].includes(lastError?.status);
+    const retryAfter = quota ? Math.ceil(lastError.retryAfter ?? 10) : 2;
+    return json({
+      error: "Le moteur gratuit est temporairement indisponible. Aucune génération payante n'a été tentée.",
+      retryAfter,
+      details: errors
+    }, quota ? 429 : 503);
   }
 };

@@ -5,4 +5,3 @@ compatibility_date = "2026-11-12"
 [vars]
 FREE_ONLY = "true"
 GROQ_MODEL = "openai/gpt-oss-20b"
-GEMINI_MODEL = "gemini-2.5-flash"

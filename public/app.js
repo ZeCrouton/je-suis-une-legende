@@ -71,7 +71,8 @@ async function generate(choiceIndex = null) {
     selectedDirection
   };
 
-  const retryDelays = [8, 12, 20, 15, 15];
+  // Délais de secours, utilisés seulement si le serveur n'indique pas le temps d'attente exact.
+  const retryDelays = [3, 5, 8, 10, 15];
   const temporaryStatuses = [408, 425, 429, 500, 502, 503, 504];
 
   const wait = seconds =>
@@ -105,6 +106,7 @@ async function generate(choiceIndex = null) {
           data.error || `Erreur du serveur (${response.status}).`
         );
         error.status = response.status;
+        error.retryAfter = Number(data.retryAfter) || null;
         throw error;
       }
 
@@ -145,14 +147,15 @@ async function generate(choiceIndex = null) {
         break;
       }
 
-      const delay = retryDelays[attempt - 1];
+      // On attend exactement le temps indiqué par le serveur (quota Groq), sinon un délai court.
+      const delay = Math.min(Math.max(Math.ceil(error.retryAfter || retryDelays[attempt - 1]), 1), 60);
 
-      $("providerNote").textContent =
-        attempt === 3
-          ? "Nos moteurs font une petite pause… Nouvelle tentative dans 30 secondes."
-          : `Nos moteurs font une petite pause… Nouvelle tentative dans ${delay} secondes.`;
-
-      await wait(delay);
+      // Compte à rebours affiché seconde par seconde.
+      for (let left = delay; left > 0; left--) {
+        $("providerNote").textContent =
+          `Le moteur gratuit fait une petite pause… Nouvelle tentative dans ${left} s.`;
+        await wait(1);
+      }
     }
   }
 
