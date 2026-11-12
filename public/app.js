@@ -1,4 +1,4 @@
-const WORKER_URL = "https://je-suis-une-legende-api.nvz-photos.workers.dev";
+const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
   ["Aventure","🧭"],["Policier","🔎"],["Mystère","🗝️"],["Conte pour enfant","🦊"],["Comédie","🎭"]
@@ -22,11 +22,33 @@ function show(view){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function showError(message){ $("errorBox").textContent=message; $("errorBox").classList.remove("hidden"); }
-function paragraphs(text){ return text.split(/\n+/).filter(Boolean).map(p=>`<p>${escapeHtml(p)}</p>`).join(""); }
+// Nettoie le texte affiché : retours à la ligne écrits sous forme de texte (\n ou /n).
+function cleanText(text){
+  return String(text)
+    .replace(/\r\n?/g, "\n")
+    .replace(/\\+r\\+n|\\+n|\\+r/g, "\n")
+    .replace(/\\+t/g, " ")
+    .replace(/(?:\/n)+(?=[\s"«A-ZÀ-ÖØ-Þa-zà-öø-ÿ0-9—–\-.,!?…]|$)/g, "\n")
+    .replace(/\*\*|__/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+function paragraphs(text){
+  return cleanText(text).split(/\n+/).map(p=>p.trim()).filter(Boolean).map(p=>`<p>${escapeHtml(p)}</p>`).join("");
+}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
-async function generate(selectedChoice = null) {
+let generating = false;
+
+// choiceIndex : index du choix cliqué sur la dernière page (null pour la première page).
+async function generate(choiceIndex = null) {
+  if (generating) return;
+  generating = true;
+  updateNav();
   $("errorBox").classList.add("hidden");
+  const last = currentStory.pages[currentStory.pages.length - 1];
+  const selectedChoice = choiceIndex === null ? null : last.choices[choiceIndex];
+  const selectedDirection = choiceIndex === null ? "" : (last.directions?.[choiceIndex] || "");
   $("providerNote").textContent = "";
 
   const buttons = [
@@ -41,10 +63,12 @@ async function generate(selectedChoice = null) {
     age: currentStory.age,
     seed: currentStory.seed,
     // Seules les 4 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
-    history: currentStory.pages.slice(-4),
+    history: currentStory.pages.slice(-4).map(p => ({ page: p.page, choice: p.choice })),
     pageNumber: currentStory.pages.length + 1,
     memo: currentStory.memo || "",
-    selectedChoice
+    selectedChoice,
+    // Conséquence prévue par l'IA pour ce choix : la page suivante doit la réaliser.
+    selectedDirection
   };
 
   const retryDelays = [15, 15, 30, 15, 15];
@@ -89,8 +113,9 @@ async function generate(selectedChoice = null) {
       }
 
       currentStory.pages.push({
-        page: data.page,
-        choices: data.choices,
+        page: cleanText(data.page),
+        choices: data.choices.map(cleanText),
+        directions: Array.isArray(data.directions) ? data.directions : [],
         choice: selectedChoice || "Début"
       });
 
@@ -100,6 +125,8 @@ async function generate(selectedChoice = null) {
       currentStory.finished = data.fin === true;
       currentStory.updatedAt = new Date().toISOString();
 
+      generating = false;
+      $("startBtn").disabled = false;
       renderStory();
 
       $("providerNote").textContent =
@@ -136,7 +163,9 @@ async function generate(selectedChoice = null) {
 
   $("providerNote").textContent = "";
   showError(message);
+  generating = false;
   buttons.forEach(button => button.disabled = false);
+  updateNav();
 }
 
 // Lecture à voix haute (API Web Speech, intégrée au navigateur, gratuite).
@@ -192,7 +221,8 @@ function readStory(scope){
   if (scope === "all") {
     speakParts(pages.map((p, i) => (i === 0 ? title : "") + `Page ${i + 1}. ` + p.page));
   } else {
-    speakParts([title + pages[pages.length - 1].page]);
+    const idx = displayedIndex ?? pages.length - 1;
+    speakParts([title + pages[idx].page]);
   }
 }
 
@@ -206,20 +236,43 @@ document.querySelectorAll("[data-read]").forEach(btn =>
 if (!canSpeak) $("readBtn").classList.add("hidden");
 
 
-function renderStory(){
+let displayedIndex = null; // page actuellement affichée (null = aucune)
+
+// Affiche la page la plus récente, ou une page précédente en relecture (atIndex).
+function renderStory(atIndex){
   stopReading();
-  const n = currentStory.pages.length;
-  const page = currentStory.pages[n-1];
-  const ended = page.choices.length === 0;
+  const pages = currentStory.pages;
+  const n = pages.length;
+  const idx = typeof atIndex === "number" ? atIndex : n - 1;
+  const isLatest = idx === n - 1;
+  const page = pages[idx];
+  displayedIndex = idx;
+
   $("genreTag").textContent = currentStory.category;
-  $("pageCount").textContent = `Page ${n}${currentStory.totalPages ? ` sur ${currentStory.totalPages}` : ""}`;
-  $("storyTitle").textContent = currentStory.title || "Une nouvelle aventure";
+  $("pageCount").textContent = `Page ${idx + 1}${currentStory.totalPages ? ` sur ${currentStory.totalPages}` : ""}${isLatest ? "" : " · relecture"}`;
+  $("storyTitle").textContent = cleanText(currentStory.title || "") || "Une nouvelle aventure";
   $("storyText").innerHTML = paragraphs(page.page);
-  document.querySelector(".choices-wrap h3").classList.toggle("hidden", ended);
-  $("choices").innerHTML = ended
-    ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>`
-    : page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(choice)}</button>`).join("");
-  document.querySelectorAll(".choice").forEach((btn,i)=>btn.addEventListener("click",()=>generate(page.choices[i])));
+
+  updateNav();
+  $("storyFooterText").textContent = isLatest ? "À vous de décider…" : "Relecture";
+
+  const heading = document.querySelector(".choices-wrap h3");
+  if (isLatest) {
+    const ended = page.choices.length === 0;
+    heading.classList.toggle("hidden", ended);
+    $("choices").innerHTML = ended
+      ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>`
+      : page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(cleanText(choice))}</button>`).join("");
+    document.querySelectorAll(".choice").forEach((btn,i)=>{
+      btn.disabled = generating;
+      btn.addEventListener("click",()=>generate(i));
+    });
+  } else {
+    // En relecture : le choix déjà fait est affiché, mais ne peut plus être modifié.
+    heading.classList.add("hidden");
+    const taken = pages[idx + 1].choice;
+    $("choices").innerHTML = `<p class="locked-choice">Choix effectué à cette étape : « ${escapeHtml(cleanText(taken))} »<br><span>Ce choix ne peut plus être modifié.</span></p>`;
+  }
   show("readerView");
 }
 
@@ -236,6 +289,7 @@ $("startBtn").addEventListener("click",async()=>{
     finished: false,
     createdAt: new Date().toISOString()
   };
+  displayedIndex = null;
   $("saveBtn").textContent = "♡ Enregistrer";
   await generate();
 });
@@ -245,6 +299,23 @@ $("saveBtn").addEventListener("click",()=>{
   if(index>=0)items[index]=currentStory;else items.unshift(currentStory);
   saveLibrary(items); $("saveBtn").textContent="♥ Enregistré";
 });
+// Navigation de relecture : on peut relire toutes les pages précédentes,
+// mais les choix déjà faits restent verrouillés.
+function updateNav(){
+  if (!currentStory) return;
+  const n = currentStory.pages.length;
+  const idx = displayedIndex ?? n - 1;
+  $("prevBtn").classList.toggle("hidden", idx <= 0);
+  $("nextBtn").classList.toggle("hidden", idx >= n - 1);
+  $("currentBtn").classList.toggle("hidden", idx >= n - 2);
+  ["prevBtn","nextBtn","currentBtn"].forEach(id => $(id).disabled = generating);
+}
+$("prevBtn").addEventListener("click", () => { if (displayedIndex > 0) renderStory(displayedIndex - 1); });
+$("nextBtn").addEventListener("click", () => {
+  const n = currentStory.pages.length;
+  if (displayedIndex < n - 1) renderStory(displayedIndex + 1);
+});
+$("currentBtn").addEventListener("click", () => renderStory());
 $("backBtn").addEventListener("click",()=>show("homeView"));
 $("libraryBtn").addEventListener("click",renderLibrary);
 $("libraryBack").addEventListener("click",()=>show("homeView"));
