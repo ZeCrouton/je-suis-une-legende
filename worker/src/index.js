@@ -125,7 +125,7 @@ ${pageNumber === 1
   : ""}
 
 TITRE
-- Propose un titre de l'histoire dans le champ "titre" : court (2 à 6 mots), évocateur, sans guillemets.
+- Le champ "titre" est OBLIGATOIRE et ne doit jamais être vide : propose un titre de l'histoire, court (2 à 6 mots), évocateur, sans guillemets.
 - Il doit être cohérent avec l'histoire écrite jusqu'ici (personnages, lieu, enjeu, ton du genre).
 - Il peut évoluer d'une page à l'autre ; sur la dernière page, il doit refléter la conclusion.
 
@@ -207,6 +207,40 @@ async function callGemini(env, prompt, isEnd) {
   return parseOutput(data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "", isEnd);
 }
 
+// Secours : si le modèle n'a pas fourni de titre, on en demande un à part, à partir du passage.
+async function requestTitle(env, category, page, memo) {
+  const model = env.GROQ_MODEL || "openai/gpt-oss-20b";
+  if (!env.GROQ_API_KEY || !GROQ_FREE_ALLOWLIST.has(model)) return "";
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: "Tu réponds uniquement par le titre demandé, sans guillemets, sans ponctuation finale et sans commentaire." },
+        { role: "user", content:
+          `Propose un titre court (2 à 6 mots), évocateur et cohérent avec ce passage d'une histoire interactive (genre : ${category}).\n\n` +
+          `MÉMOIRE DU RÉCIT :\n${String(memo || "").slice(0, 800)}\n\nPASSAGE :\n${String(page).slice(0, 2000)}` }
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+      reasoning_effort: "low"
+    })
+  });
+  if (!response.ok) return "";
+  const data = await response.json();
+  const raw = String(data.choices?.[0]?.message?.content || "").trim().split("\n")[0];
+  return raw.replace(/["«»*#]/g, "").replace(/[.!?:]+$/, "").trim().slice(0, 80);
+}
+
+async function withTitle(env, input, result, meta, provider) {
+  let titre = result.titre;
+  if (!titre) {
+    titre = await requestTitle(env, input.category, result.page, result.memoire).catch(() => "");
+  }
+  return json({ ...result, titre, ...meta, provider });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -229,7 +263,7 @@ export default {
     if (env.GROQ_API_KEY) {
       try {
         const result = await callGroq(env, prompt, plan.isEnd);
-        return json({ ...result, ...meta, provider: "Groq" });
+        return withTitle(env, input, result, meta, "Groq");
       } catch (e) {
         errors.push(`Groq: ${e.message}`);
         // Bascule uniquement en cas de quota, indisponibilité temporaire ou réponse mal formée.
@@ -242,7 +276,7 @@ export default {
     if (env.GEMINI_API_KEY && env.GEMINI_FREE_CONFIRMED === "YES_I_CONFIRMED_NO_BILLING") {
       try {
         const result = await callGemini(env, prompt, plan.isEnd);
-        return json({ ...result, ...meta, provider: "Gemini" });
+        return withTitle(env, input, result, meta, "Gemini");
       } catch (e) {
         errors.push(`Gemini: ${e.message}`);
       }
