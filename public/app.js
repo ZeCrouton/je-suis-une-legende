@@ -143,7 +143,9 @@ async function generate(choiceIndex = null) {
         temporaryStatuses.includes(error.status) ||
         error.status === undefined;
 
-      if (!temporary || attempt === 6) {
+      // Attente longue (quota gratuit épuisé) : inutile de réessayer en boucle,
+      // on affiche tout de suite le message avec le délai.
+      if (!temporary || attempt === 6 || (error.retryAfter && error.retryAfter > 60)) {
         break;
       }
 
@@ -159,10 +161,12 @@ async function generate(choiceIndex = null) {
     }
   }
 
-  const message =
-    `${lastError?.message || "La génération a échoué."} ` +
-    "Les nouvelles tentatives automatiques ont échoué. " +
-    "Tu peux réessayer manuellement. Aucune génération payante n'a été tentée.";
+  const longWait = lastError?.retryAfter && lastError.retryAfter > 60;
+  const message = longWait
+    ? lastError.message
+    : `${lastError?.message || "La génération a échoué."} ` +
+      "Les nouvelles tentatives automatiques ont échoué. " +
+      "Tu peux réessayer manuellement. Aucune génération payante n'a été tentée.";
 
   $("providerNote").textContent = "";
   showError(message);

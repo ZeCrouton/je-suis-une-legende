@@ -399,8 +399,15 @@ async function callGroq(env, prompts, isEnd) {
   if (!response.ok) {
     const error = new Error(`Groq HTTP ${response.status}`);
     error.status = response.status;
-    // Groq indique combien de temps attendre avant que le quota se libère.
+    // Groq indique combien de temps attendre avant que le quota se libère,
+    // et dans son message quelle limite est atteinte (par minute ou par jour).
     error.retryAfter = retryAfterSeconds(response.headers);
+    const body = await response.text().catch(() => "");
+    let message = "";
+    try { message = JSON.parse(body)?.error?.message || ""; } catch { message = body; }
+    error.groqMessage = String(message).slice(0, 400);
+    if (/per day|\(TPD\)|\(RPD\)/i.test(error.groqMessage)) error.limit = "jour";
+    else if (/per minute|\(TPM\)|\(RPM\)/i.test(error.groqMessage)) error.limit = "minute";
     throw error;
   }
   const data = await response.json();
@@ -497,7 +504,7 @@ export default {
         return withTitle(env, input, result, meta, "Groq");
       } catch (e) {
         lastError = e;
-        errors.push(`Groq: ${e.message}`);
+        errors.push(`Groq: ${e.message}${e.groqMessage ? ` (${e.groqMessage})` : ""}`);
         if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
         if (e.status === 429 && e.retryAfter !== null && e.retryAfter <= 12 && waited + e.retryAfter <= 20) {
           await sleep(e.retryAfter + 0.3);
@@ -510,10 +517,13 @@ export default {
     }
     const quota = [413, 429].includes(lastError?.status);
     const retryAfter = quota ? Math.ceil(lastError.retryAfter ?? 10) : 2;
-    return json({
-      error: "Le moteur gratuit est temporairement indisponible. Aucune génération payante n'a été tentée.",
-      retryAfter,
-      details: errors
-    }, quota ? 429 : 503);
+    let error = "Le moteur gratuit est temporairement indisponible. Aucune génération payante n'a été tentée.";
+    if (quota && retryAfter > 60) {
+      const minutes = Math.ceil(retryAfter / 60);
+      const wait = minutes >= 60 ? `${Math.round(minutes / 60)} h` : `${minutes} min`;
+      error = `Le quota gratuit de l'IA est épuisé pour le moment${lastError.limit === "jour" ? " (limite quotidienne)" : ""}. ` +
+        `Réessaie dans environ ${wait}. Ton histoire est conservée.`;
+    }
+    return json({ error, retryAfter, limit: lastError?.limit || null, details: errors }, quota ? 429 : 503);
   }
 };
