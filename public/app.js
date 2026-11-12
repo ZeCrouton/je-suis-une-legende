@@ -1,4 +1,4 @@
-const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
+const WORKER_URL = "https://je-suis-une-legende-api.nvz-photos.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
   ["Aventure","🧭"],["Policier","🔎"],["Mystère","🗝️"],["Conte pour enfant","🦊"],["Comédie","🎭"]
