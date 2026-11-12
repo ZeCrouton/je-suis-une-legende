@@ -17,6 +17,7 @@ function renderCategories(){
   }));
 }
 function show(view){
+  if (typeof stopReading === "function") stopReading();
   ["homeView","readerView","libraryView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));
   window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -138,7 +139,75 @@ async function generate(selectedChoice = null) {
   buttons.forEach(button => button.disabled = false);
 }
 
+// Lecture à voix haute (API Web Speech, intégrée au navigateur, gratuite).
+const canSpeak = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+let speaking = false;
+let readToken = 0; // invalide les événements d'une lecture précédente
+
+function frenchVoice(){
+  const voices = speechSynthesis.getVoices();
+  return voices.find(v => v.lang && v.lang.toLowerCase().startsWith("fr-fr"))
+      || voices.find(v => v.lang && v.lang.toLowerCase().startsWith("fr"))
+      || null;
+}
+
+function setReadButton(isSpeaking){
+  speaking = isSpeaking;
+  const btn = $("readBtn");
+  btn.textContent = isSpeaking ? "⏹ Arrêter" : "🔊 Écouter";
+  btn.setAttribute("aria-pressed", String(isSpeaking));
+}
+
+function stopReading(){
+  readToken++;
+  if (canSpeak) speechSynthesis.cancel();
+  setReadButton(false);
+  $("readMenu").classList.add("hidden");
+}
+
+// Lit une liste de passages. Chaque passage est une lecture distincte, pour éviter
+// que les navigateurs coupent les longs textes.
+function speakParts(parts){
+  stopReading();
+  const token = readToken;
+  const voice = frenchVoice();
+  parts.forEach((text, i) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "fr-FR";
+    utterance.rate = 0.95;
+    if (voice) utterance.voice = voice;
+    if (i === parts.length - 1) {
+      utterance.onend = () => { if (token === readToken) setReadButton(false); };
+    }
+    utterance.onerror = () => { if (token === readToken) setReadButton(false); };
+    speechSynthesis.speak(utterance);
+  });
+  setReadButton(true);
+}
+
+function readStory(scope){
+  if (!canSpeak || !currentStory || !currentStory.pages.length) return;
+  const title = currentStory.title ? currentStory.title + ". " : "";
+  const pages = currentStory.pages;
+  if (scope === "all") {
+    speakParts(pages.map((p, i) => (i === 0 ? title : "") + `Page ${i + 1}. ` + p.page));
+  } else {
+    speakParts([title + pages[pages.length - 1].page]);
+  }
+}
+
+$("readBtn").addEventListener("click", () => {
+  if (speaking) { stopReading(); return; }
+  $("readMenu").classList.toggle("hidden");
+});
+document.querySelectorAll("[data-read]").forEach(btn =>
+  btn.addEventListener("click", () => readStory(btn.dataset.read))
+);
+if (!canSpeak) $("readBtn").classList.add("hidden");
+
+
 function renderStory(){
+  stopReading();
   const n = currentStory.pages.length;
   const page = currentStory.pages[n-1];
   const ended = page.choices.length === 0;

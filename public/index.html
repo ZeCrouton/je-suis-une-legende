@@ -34,7 +34,8 @@
     </section>
 
     <section id="readerView" class="hidden">
-      <div class="reader-head"><button id="backBtn" class="ghost">← Accueil</button><div><span id="genreTag" class="genre-tag"></span><span id="pageCount" class="page-count"></span></div><button id="saveBtn" class="ghost">♡ Enregistrer</button></div>
+      <div class="reader-head"><button id="backBtn" class="ghost">← Accueil</button><div><span id="genreTag" class="genre-tag"></span><span id="pageCount" class="page-count"></span></div><div class="reader-actions"><button id="readBtn" class="ghost" aria-pressed="false">🔊 Écouter</button><button id="saveBtn" class="ghost">♡ Enregistrer</button></div></div>
+      <div id="readMenu" class="read-menu hidden"><button class="ghost" data-read="page">Cette page</button><button class="ghost" data-read="all">Tout le récit</button></div>
       <article class="story-card">
         <div class="story-kicker">VOTRE HISTOIRE</div>
         <h2 id="storyTitle">Une nouvelle aventure</h2>
