@@ -4,7 +4,10 @@ Application web de romans interactifs « Je suis une légende ». Interface stat
 
 ## Fonctionnalités
 - 10 catégories : Fantasy, Science-fiction, Thriller, Horreur, Romance, Aventure, Policier, Mystère, Conte pour enfant, Comédie.
-- Deux choix par page.
+- Deux choix par page, sauf sur la dernière page qui conclut l'histoire.
+- Longueur d'un récit complet : 10 pages (adolescents et adultes) ou 7 pages (conte enfant).
+- Structure dramatique imposée par le code : ouverture, développement, tournant, climax, dénouement.
+- Mémoire du récit renvoyée à chaque page (personnages, faits, fils ouverts, secret) pour garder la cohérence.
 - Mode conte enfant avec tranches d'âge 3–5, 6–8 et 9–12 ans.
 - Bibliothèque locale : les histoires sont enregistrées dans le navigateur (localStorage).
 - Clés API conservées côté Worker, jamais envoyées au navigateur.
@@ -35,7 +38,7 @@ Prérequis : compte Cloudflare gratuit et Node.js installé sur ton ordinateur.
    npx wrangler login
    ```
 3. Configure le Worker :
-   - Ouvre `wrangler.toml` et remplace `YOUR_WORKER_NAME` par un nom unique.
+   - Le nom du Worker est déjà défini dans `wrangler.toml` (`je-suis-une-legende-api`), qui correspond à l'URL utilisée dans `app.js`.
    - Déploie :
      ```bash
      npx wrangler deploy

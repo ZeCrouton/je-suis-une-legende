@@ -39,7 +39,10 @@ async function generate(selectedChoice = null) {
     category: currentStory.category,
     age: currentStory.age,
     seed: currentStory.seed,
-    history: currentStory.pages,
+    // Seules les 4 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
+    history: currentStory.pages.slice(-4),
+    pageNumber: currentStory.pages.length + 1,
+    memo: currentStory.memo || "",
     selectedChoice
   };
 
@@ -80,7 +83,7 @@ async function generate(selectedChoice = null) {
         throw error;
       }
 
-      if (!data.page || !Array.isArray(data.choices) || data.choices.length !== 2) {
+      if (!data.page || !Array.isArray(data.choices)) {
         throw new Error("La réponse reçue est incomplète. Réessaie.");
       }
 
@@ -90,6 +93,10 @@ async function generate(selectedChoice = null) {
         choice: selectedChoice || "Début"
       });
 
+      currentStory.memo = data.memoire || currentStory.memo || "";
+      currentStory.title = data.titre || currentStory.title || "";
+      currentStory.totalPages = data.totalPages || currentStory.totalPages;
+      currentStory.finished = data.fin === true;
       currentStory.updatedAt = new Date().toISOString();
 
       renderStory();
@@ -130,19 +137,37 @@ async function generate(selectedChoice = null) {
   showError(message);
   buttons.forEach(button => button.disabled = false);
 }
+
 function renderStory(){
-  const n=currentStory.pages.length;
-  const page=currentStory.pages[n-1];
-  $("genreTag").textContent=currentStory.category;
-  $("pageCount").textContent=`Page ${n}`;
-  $("storyTitle").textContent=currentStory.title||"Une nouvelle aventure";
-  $("storyText").innerHTML=paragraphs(page.page);
-  $("choices").innerHTML=page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(choice)}</button>`).join("");
+  const n = currentStory.pages.length;
+  const page = currentStory.pages[n-1];
+  const ended = page.choices.length === 0;
+  $("genreTag").textContent = currentStory.category;
+  $("pageCount").textContent = `Page ${n}${currentStory.totalPages ? ` sur ${currentStory.totalPages}` : ""}`;
+  $("storyTitle").textContent = currentStory.title || "Une nouvelle aventure";
+  $("storyText").innerHTML = paragraphs(page.page);
+  document.querySelector(".choices-wrap h3").classList.toggle("hidden", ended);
+  $("choices").innerHTML = ended
+    ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>`
+    : page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(choice)}</button>`).join("");
   document.querySelectorAll(".choice").forEach((btn,i)=>btn.addEventListener("click",()=>generate(page.choices[i])));
   show("readerView");
 }
+
 $("startBtn").addEventListener("click",async()=>{
-  currentStory={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),category:selectedCategory,age:$("ageSelect").value,seed:$("seed").value.trim(),title:$("seed").value.trim().slice(0,55)||"Une nouvelle aventure",pages:[],createdAt:new Date().toISOString()};
+  currentStory = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    category: selectedCategory,
+    age: $("ageSelect").value,
+    seed: $("seed").value.trim(),
+    title: "",
+    pages: [],
+    memo: "",
+    totalPages: null,
+    finished: false,
+    createdAt: new Date().toISOString()
+  };
+  $("saveBtn").textContent = "♡ Enregistrer";
   await generate();
 });
 $("saveBtn").addEventListener("click",()=>{
@@ -156,8 +181,12 @@ $("libraryBtn").addEventListener("click",renderLibrary);
 $("libraryBack").addEventListener("click",()=>show("homeView"));
 function renderLibrary(){
   const items=loadLibrary();
-  $("libraryList").innerHTML=items.length?items.map(s=>`<article class="library-item"><div><h3>${escapeHtml(s.title||"Une aventure")}</h3><p>${escapeHtml(s.category)} · ${s.pages.length} page(s)</p></div><div><button class="ghost" data-open="${s.id}">Reprendre</button> <button class="ghost" data-delete="${s.id}" aria-label="Supprimer">×</button></div></article>`).join(""):`<div class="empty">Votre bibliothèque est encore vide.<br>Enregistrez une histoire pour la retrouver ici.</div>`;
-  document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{currentStory=loadLibrary().find(x=>x.id===b.dataset.open);renderStory()}));
+  $("libraryList").innerHTML=items.length?items.map(s=>`<article class="library-item"><div><h3>${escapeHtml(s.title||"Une aventure")}</h3><p>${escapeHtml(s.category)} · ${s.pages.length} page(s)${s.finished ? " · terminée" : ""}</p></div><div><button class="ghost" data-open="${s.id}">Reprendre</button> <button class="ghost" data-delete="${s.id}" aria-label="Supprimer">×</button></div></article>`).join(""):`<div class="empty">Votre bibliothèque est encore vide.<br>Enregistrez une histoire pour la retrouver ici.</div>`;
+  document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{
+    currentStory=loadLibrary().find(x=>x.id===b.dataset.open);
+    $("saveBtn").textContent="♡ Enregistrer";
+    renderStory();
+  }));
   document.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>{saveLibrary(loadLibrary().filter(x=>x.id!==b.dataset.delete));renderLibrary()}));
   show("libraryView");
 }

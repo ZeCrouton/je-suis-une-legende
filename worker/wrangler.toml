@@ -1,4 +1,4 @@
-name = "YOUR_WORKER_NAME"
+name = "je-suis-une-legende-api"
 main = "src/index.js"
 compatibility_date = "2026-11-12"
 
