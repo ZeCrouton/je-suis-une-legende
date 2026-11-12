@@ -17,6 +17,11 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .review-row{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .review-row button:disabled{opacity:.45;cursor:not-allowed}
 .resume{display:block;margin:0 auto 18px}
+.about-btn{display:block;margin:0 auto 18px}
+.about{max-width:720px;margin:0 auto 22px}
+.about h2{font-size:22px;font-weight:400;margin:0 0 14px;color:#f3e9d8}
+.about p{margin:0 0 12px;color:#dfe5ef;font:15px/1.7 Arial,sans-serif}
+.about .ghost{margin-top:6px}
 .hero-option{margin:22px 0 0}
 .hero-toggle{width:100%;text-align:left;padding:13px 16px;border-radius:12px;font-size:14px}
 .hero-toggle[aria-pressed="true"]{border-color:var(--gold);background:rgba(201,169,110,.14)}

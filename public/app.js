@@ -431,6 +431,12 @@ function restoreState(){
     else { displayedIndex = idx ?? n - 1; updateResume(); }
   } catch {}
 }
+function setAbout(open){
+  $("aboutPanel").classList.toggle("hidden", !open);
+  $("aboutBtn").setAttribute("aria-expanded", String(open));
+}
+$("aboutBtn").addEventListener("click", () => setAbout($("aboutBtn").getAttribute("aria-expanded") !== "true"));
+$("aboutClose").addEventListener("click", () => { setAbout(false); $("aboutBtn").focus(); });
 $("resumeBtn").addEventListener("click", () => renderStory(displayedIndex ?? undefined));
 placeNotes("homeView");
 loadHeroPrefs();
