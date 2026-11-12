@@ -229,12 +229,12 @@ Chaque page est la suite immédiate de la précédente, comme la page suivante d
 CHOIX
 ${choiceRules}
 
-MÉMOIRE (champ "memoire", 1000 caractères maximum, réécrite entièrement à chaque page)
+MÉMOIRE (champ "memoire", 700 caractères maximum, réécrite entièrement à chaque page)
 Lignes courtes, dans cet ordre :
 OBJECTIF : ce que veut le héros et ce qui l'en empêche
 PERSONNAGES : nom, trait, relation
 LIEUX ET OBJETS importants
-DÉJÀ VÉCU : une ligne très brève par page écrite, pour ne jamais revenir en arrière
+DÉJÀ VÉCU : quelques mots par page écrite, pour ne jamais revenir en arrière
 FILS OUVERTS
 SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
 
@@ -249,12 +249,12 @@ Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la
 function buildUserPrompt(input, plan) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
-  const memo = String(input.memo || "").slice(0, 1600);
+  const memo = String(input.memo || "").slice(0, 1000);
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
 
-  const history = Array.isArray(input.history) ? input.history.slice(-4) : [];
+  const history = Array.isArray(input.history) ? input.history.slice(-3) : [];
   const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
 
   const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}`;
@@ -363,7 +363,7 @@ function parseOutput(raw, isEnd) {
   const paragraphs = stripHeading(toParagraphs(value), titre);
   const page = paragraphs.join("\n\n");
   const choices = parseChoices(value);
-  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1400) : "";
+  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1000) : "";
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
   return {
@@ -392,7 +392,7 @@ async function callGroq(env, prompts, isEnd) {
       ],
       temperature: 0.8,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
-      max_tokens: 3000,
+      max_tokens: 2200,
       reasoning_effort: "low",
       response_format: { type: "json_object" }
     })
@@ -419,7 +419,11 @@ async function callGemini(env, prompts, isEnd) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: prompts.system }] },
       contents: [{ role: "user", parts: [{ text: prompts.user }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3000 }
+      generationConfig: {
+        responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 2500,
+        // Sans « réflexion » préalable : réponse beaucoup plus rapide.
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     })
   });
   if (!response.ok) {
@@ -491,7 +495,7 @@ export default {
       } catch (e) {
         errors.push(`Groq: ${e.message}`);
         // Bascule uniquement en cas de quota, indisponibilité temporaire ou réponse mal formée.
-        if (![429, 500, 502, 503, 504, undefined].includes(e.status)) {
+        if (![413, 429, 500, 502, 503, 504, undefined].includes(e.status)) {
           return json({ error: "Le fournisseur principal a refusé la requête. Aucun autre fournisseur n'a été appelé.", details: errors }, 503);
         }
       }
