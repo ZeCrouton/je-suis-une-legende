@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10182d">
+  <title>Je suis une légende</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Je suis une légende, accueil"><span class="brand-mark">✦</span> Je suis une légende</a>
+    <div class="top-actions"><button id="libraryBtn" class="ghost">Ma bibliothèque <span id="savedCount">0</span></button></div>
+  </header>
+  <main class="shell">
+    <section id="homeView">
+      <div class="hero">
+        <div class="eyebrow">VOTRE IMAGINATION, VOTRE HISTOIRE</div>
+        <h1>Chaque choix ouvre<br><em>un nouveau monde.</em></h1>
+        <p>Choisissez un univers, laissez l'histoire commencer et décidez de la suite.</p>
+      </div>
+      <section class="setup panel">
+        <div class="section-heading"><span class="step">01</span><div><h2>Choisissez votre univers</h2><p>Quel genre d'histoire avez-vous envie de vivre ?</p></div></div>
+        <div id="categories" class="categories"></div>
+        <div id="childOptions" class="child-options hidden">
+          <label for="ageSelect">Âge du jeune lecteur</label>
+          <select id="ageSelect"><option>3–5 ans</option><option selected>6–8 ans</option><option>9–12 ans</option></select>
+        </div>
+        <label class="field-label" for="seed">Une idée de départ (facultatif)</label>
+        <textarea id="seed" rows="2" placeholder="Ex. : Une jeune exploratrice découvre une île qui n'apparaît sur aucune carte…"></textarea>
+        <button id="startBtn" class="primary wide">Commencer l'aventure <span>→</span></button>
+        <p class="fineprint">Une page à la fois · Deux choix · Une histoire qui vous ressemble</p>
+      </section>
+    </section>
+
+    <section id="readerView" class="hidden">
+      <div class="reader-head"><button id="backBtn" class="ghost">← Accueil</button><div><span id="genreTag" class="genre-tag"></span><span id="pageCount" class="page-count"></span></div><button id="saveBtn" class="ghost">♡ Enregistrer</button></div>
+      <article class="story-card">
+        <div class="story-kicker">VOTRE HISTOIRE</div>
+        <h2 id="storyTitle">Une nouvelle aventure</h2>
+        <div id="storyText" class="story-text"></div>
+        <div class="story-footer"><span>✦</span><span>À vous de décider…</span><span>✦</span></div>
+      </article>
+      <section class="choices-wrap"><h3>Que choisissez-vous ?</h3><div id="choices" class="choices"></div></section>
+      <p id="providerNote" class="provider-note"></p>
+      <p id="errorBox" class="error hidden" role="alert"></p>
+    </section>
+
+    <section id="libraryView" class="hidden">
+      <div class="library-head"><button id="libraryBack" class="ghost">← Retour</button><div><div class="eyebrow">VOS AVENTURES</div><h1>Ma bibliothèque</h1></div></div>
+      <div id="libraryList" class="library-list"></div>
+    </section>
+  </main>
+  <footer>Je suis une légende <span>·</span> Des histoires infinies. Des destins uniques.</footer>
+  <script src="app.js"></script>
+</body>
+</html>
