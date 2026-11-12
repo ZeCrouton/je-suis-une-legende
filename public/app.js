@@ -35,12 +35,15 @@ function updateResume(){
   btn.classList.toggle("hidden", !has);
   if (has) btn.textContent = `↩ Reprendre mon histoire en cours · ${currentStory.category} · page ${currentStory.pages.length}`;
 }
+// Messages d'attente et d'erreur : affichés sur l'écran où se trouve l'utilisateur
+// (accueil quand il vient de cliquer sur « Commencer l'aventure », lecture sinon).
+function placeNotes(view){
+  (view === "homeView" ? $("noteSlotHome") : $("noteSlotReader")).append($("providerNote"), $("errorBox"));
+}
 function show(view){
   if (typeof stopReading === "function") stopReading();
   ["homeView","readerView","libraryView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));
-  // Messages d'attente et d'erreur : affichés sur l'écran où se trouve l'utilisateur
-  // (accueil quand il vient de cliquer sur « Commencer l'aventure », lecture sinon).
-  (view === "homeView" ? $("noteSlotHome") : $("noteSlotReader")).append($("providerNote"), $("errorBox"));
+  placeNotes(view);
   window.scrollTo({top:0,behavior:"smooth"});
   saveState(view);
   updateResume();
@@ -394,4 +397,5 @@ function restoreState(){
   } catch {}
 }
 $("resumeBtn").addEventListener("click", () => renderStory(displayedIndex ?? undefined));
+placeNotes("homeView");
 renderCategories(); updateCount(); restoreState();
