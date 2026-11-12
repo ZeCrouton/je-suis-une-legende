@@ -24,31 +24,111 @@ function showError(message){ $("errorBox").textContent=message; $("errorBox").cl
 function paragraphs(text){ return text.split(/\n+/).filter(Boolean).map(p=>`<p>${escapeHtml(p)}</p>`).join(""); }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
-async function generate(selectedChoice=null){
+async function generate(selectedChoice = null) {
   $("errorBox").classList.add("hidden");
-  $("providerNote").textContent="";
-  const buttons=[...document.querySelectorAll(".choice"),$("startBtn")].filter(Boolean);
-  buttons.forEach(b=>b.disabled=true);
-  const body={
-    category:currentStory.category,
-    age:currentStory.age,
-    seed:currentStory.seed,
-    history:currentStory.pages,
+  $("providerNote").textContent = "";
+
+  const buttons = [
+    ...document.querySelectorAll(".choice"),
+    $("startBtn")
+  ].filter(Boolean);
+
+  buttons.forEach(button => button.disabled = true);
+
+  const body = {
+    category: currentStory.category,
+    age: currentStory.age,
+    seed: currentStory.seed,
+    history: currentStory.pages,
     selectedChoice
   };
-  try{
-    const response=await fetch(`${WORKER_URL}/api/story`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const data=await response.json();
-    if(!response.ok) throw new Error(data.error||"La génération est momentanément indisponible.");
-    currentStory.pages.push({page:data.page,choices:data.choices,choice:selectedChoice||"Début"});
-    currentStory.updatedAt=new Date().toISOString();
-    renderStory();
-    $("providerNote").textContent=`Généré avec ${data.provider} · Histoire enregistrée dans cette session`;
-  }catch(error){
-    showError(`${error.message} Tu peux réessayer plus tard. Aucune génération payante n'a été tentée.`);
-  }finally{
-    buttons.forEach(b=>b.disabled=false);
+
+  const retryDelays = [15, 15, 30, 15, 15];
+  const temporaryStatuses = [408, 425, 429, 500, 502, 503, 504];
+
+  const wait = seconds =>
+    new Promise(resolve => setTimeout(resolve, seconds * 1000));
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      $("providerNote").textContent =
+        attempt === 1
+          ? "Génération de votre histoire en cours…"
+          : `Nouvelle tentative (${attempt}/6)…`;
+
+      const response = await fetch(`${WORKER_URL}/api/story`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      if (!response.ok) {
+        const error = new Error(
+          data.error || `Erreur du serveur (${response.status}).`
+        );
+        error.status = response.status;
+        throw error;
+      }
+
+      if (!data.page || !Array.isArray(data.choices) || data.choices.length !== 2) {
+        throw new Error("La réponse reçue est incomplète. Réessaie.");
+      }
+
+      currentStory.pages.push({
+        page: data.page,
+        choices: data.choices,
+        choice: selectedChoice || "Début"
+      });
+
+      currentStory.updatedAt = new Date().toISOString();
+
+      renderStory();
+
+      $("providerNote").textContent =
+        `Généré avec ${data.provider} · Histoire enregistrée dans cette session`;
+
+      return;
+
+    } catch (error) {
+      lastError = error;
+
+      const temporary =
+        temporaryStatuses.includes(error.status) ||
+        error.status === undefined;
+
+      if (!temporary || attempt === 6) {
+        break;
+      }
+
+      const delay = retryDelays[attempt - 1];
+
+      $("providerNote").textContent =
+        attempt === 3
+          ? "Nos moteurs font une petite pause… Nouvelle tentative dans 30 secondes."
+          : `Nos moteurs font une petite pause… Nouvelle tentative dans ${delay} secondes.`;
+
+      await wait(delay);
+    }
   }
+
+  const message =
+    `${lastError?.message || "La génération a échoué."} ` +
+    "Les nouvelles tentatives automatiques ont échoué. " +
+    "Tu peux réessayer manuellement. Aucune génération payante n'a été tentée.";
+
+  $("providerNote").textContent = "";
+  showError(message);
+  buttons.forEach(button => button.disabled = false);
 }
 function renderStory(){
   const n=currentStory.pages.length;
