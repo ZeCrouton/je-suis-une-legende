@@ -1,4 +1,4 @@
-const WORKER_URL = "https://YOUR_WORKER_NAME.YOUR_SUBDOMAIN.workers.dev";
+const WORKER_URL = "https://https://je-suis-une-legende-api.nvzplayforfun.workers.dev/";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
   ["Aventure","🧭"],["Policier","🔎"],["Mystère","🗝️"],["Conte pour enfant","🦊"],["Comédie","🎭"]
