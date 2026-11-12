@@ -62,8 +62,8 @@ async function generate(choiceIndex = null) {
     category: currentStory.category,
     age: currentStory.age,
     seed: currentStory.seed,
-    // Seules les 4 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
-    history: currentStory.pages.slice(-4).map(p => ({ page: p.page, choice: p.choice })),
+    // Seules les 3 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
+    history: currentStory.pages.slice(-3).map(p => ({ page: p.page, choice: p.choice })),
     pageNumber: currentStory.pages.length + 1,
     memo: currentStory.memo || "",
     selectedChoice,
@@ -71,7 +71,7 @@ async function generate(choiceIndex = null) {
     selectedDirection
   };
 
-  const retryDelays = [15, 15, 30, 15, 15];
+  const retryDelays = [8, 12, 20, 15, 15];
   const temporaryStatuses = [408, 425, 429, 500, 502, 503, 504];
 
   const wait = seconds =>
