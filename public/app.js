@@ -170,8 +170,7 @@ async function generate(choiceIndex = null) {
       $("startBtn").disabled = false;
       renderStory();
 
-      $("providerNote").textContent =
-        `Généré avec ${data.provider} · Histoire enregistrée dans cette session`;
+      $("providerNote").textContent = "Histoire enregistrée sur cet appareil";
 
       return;
 
