@@ -16,10 +16,34 @@ function renderCategories(){
     selectedCategory=btn.dataset.cat; renderCategories(); $("childOptions").classList.toggle("hidden",selectedCategory!=="Conte pour enfant");
   }));
 }
+// Histoire en cours : sauvegardée à chaque changement d'écran ou de page, pour qu'un
+// rechargement de la page (ou la fermeture de l'onglet) ne fasse rien perdre.
+const STATE_KEY = "recitsChoixCurrent";
+function saveState(view){
+  try {
+    if (!currentStory || !currentStory.pages.length) return;
+    localStorage.setItem(STATE_KEY, JSON.stringify({ story: currentStory, view, index: displayedIndex }));
+    // Si l'histoire est déjà dans la bibliothèque, sa copie est mise à jour aussi.
+    const items = loadLibrary();
+    const i = items.findIndex(x => x.id === currentStory.id);
+    if (i >= 0 && JSON.stringify(items[i]) !== JSON.stringify(currentStory)) { items[i] = currentStory; saveLibrary(items); }
+  } catch {}
+}
+function updateResume(){
+  const btn = $("resumeBtn");
+  const has = currentStory && currentStory.pages.length;
+  btn.classList.toggle("hidden", !has);
+  if (has) btn.textContent = `↩ Reprendre mon histoire en cours · ${currentStory.category} · page ${currentStory.pages.length}`;
+}
 function show(view){
   if (typeof stopReading === "function") stopReading();
   ["homeView","readerView","libraryView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));
+  // Messages d'attente et d'erreur : affichés sur l'écran où se trouve l'utilisateur
+  // (accueil quand il vient de cliquer sur « Commencer l'aventure », lecture sinon).
+  (view === "homeView" ? $("noteSlotHome") : $("noteSlotReader")).append($("providerNote"), $("errorBox"));
   window.scrollTo({top:0,behavior:"smooth"});
+  saveState(view);
+  updateResume();
 }
 function showError(message){ $("errorBox").textContent=message; $("errorBox").classList.remove("hidden"); }
 // Nettoie le texte affiché : retours à la ligne écrits sous forme de texte (\n ou /n).
@@ -57,6 +81,16 @@ async function generate(choiceIndex = null) {
   ].filter(Boolean);
 
   buttons.forEach(button => button.disabled = true);
+
+  // Le bouton cliqué affiche un message d'attente à la place de son texte, le temps de la génération.
+  const clicked = choiceIndex === null ? $("startBtn") : document.querySelectorAll(".choice")[choiceIndex];
+  const originalHTML = clicked ? clicked.innerHTML : "";
+  if (clicked) { clicked.textContent = "L'auteur fait glisser sa plume…"; clicked.classList.add("is-loading"); }
+  const restoreButton = () => {
+    if (!clicked) return;
+    clicked.innerHTML = originalHTML;
+    clicked.classList.remove("is-loading");
+  };
 
   const body = {
     category: currentStory.category,
@@ -128,6 +162,7 @@ async function generate(choiceIndex = null) {
       currentStory.updatedAt = new Date().toISOString();
 
       generating = false;
+      restoreButton();
       $("startBtn").disabled = false;
       renderStory();
 
@@ -171,6 +206,7 @@ async function generate(choiceIndex = null) {
   $("providerNote").textContent = "";
   showError(message);
   generating = false;
+  restoreButton();
   buttons.forEach(button => button.disabled = false);
   updateNav();
 }
@@ -284,6 +320,8 @@ function renderStory(atIndex){
 }
 
 $("startBtn").addEventListener("click",async()=>{
+  const previousStory = currentStory;
+  const previousIndex = displayedIndex;
   currentStory = {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     category: selectedCategory,
@@ -299,6 +337,8 @@ $("startBtn").addEventListener("click",async()=>{
   displayedIndex = null;
   $("saveBtn").textContent = "♡ Enregistrer";
   await generate();
+  // Première page impossible à générer : on retrouve l'histoire précédente, rien n'est perdu.
+  if (!currentStory.pages.length) { currentStory = previousStory; displayedIndex = previousIndex; updateResume(); }
 });
 $("saveBtn").addEventListener("click",()=>{
   if(!currentStory||!currentStory.pages.length)return;
@@ -331,10 +371,27 @@ function renderLibrary(){
   $("libraryList").innerHTML=items.length?items.map(s=>`<article class="library-item"><div><h3>${escapeHtml(s.title||"Une aventure")}</h3><p>${escapeHtml(s.category)} · ${s.pages.length} page(s)${s.finished ? " · terminée" : ""}</p></div><div><button class="ghost" data-open="${s.id}">Reprendre</button> <button class="ghost" data-delete="${s.id}" aria-label="Supprimer">×</button></div></article>`).join(""):`<div class="empty">Votre bibliothèque est encore vide.<br>Enregistrez une histoire pour la retrouver ici.</div>`;
   document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{
     currentStory=loadLibrary().find(x=>x.id===b.dataset.open);
-    $("saveBtn").textContent="♡ Enregistrer";
+    displayedIndex=null;
+    $("saveBtn").textContent="♥ Enregistré";
     renderStory();
   }));
   document.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>{saveLibrary(loadLibrary().filter(x=>x.id!==b.dataset.delete));renderLibrary()}));
   show("libraryView");
 }
-renderCategories(); updateCount();
+// Au chargement : on revient exactement là où l'utilisateur était (page lue, relecture, bibliothèque).
+function restoreState(){
+  try {
+    const st = JSON.parse(localStorage.getItem(STATE_KEY) || "null");
+    if (!st || !st.story || !Array.isArray(st.story.pages) || !st.story.pages.length) return;
+    currentStory = st.story;
+    const saved = loadLibrary().find(x => x.id === currentStory.id);
+    $("saveBtn").textContent = saved ? "♥ Enregistré" : "♡ Enregistrer";
+    const n = currentStory.pages.length;
+    const idx = Number.isInteger(st.index) && st.index >= 0 && st.index < n ? st.index : undefined;
+    if (st.view === "readerView") renderStory(idx);
+    else if (st.view === "libraryView") { displayedIndex = idx ?? n - 1; renderLibrary(); }
+    else { displayedIndex = idx ?? n - 1; updateResume(); }
+  } catch {}
+}
+$("resumeBtn").addEventListener("click", () => renderStory(displayedIndex ?? undefined));
+renderCategories(); updateCount(); restoreState();

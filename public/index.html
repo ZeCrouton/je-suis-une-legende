@@ -14,6 +14,7 @@
   </header>
   <main class="shell">
     <section id="homeView">
+      <button id="resumeBtn" class="ghost resume hidden"></button>
       <div class="hero">
         <div class="eyebrow">VOTRE IMAGINATION, VOTRE HISTOIRE</div>
         <h1>Chaque choix ouvre<br><em>un nouveau monde.</em></h1>
@@ -30,6 +31,7 @@
         <textarea id="seed" rows="2" placeholder="Ex. : Une jeune exploratrice découvre une île qui n'apparaît sur aucune carte…"></textarea>
         <button id="startBtn" class="primary wide">Commencer l'aventure <span>→</span></button>
         <p class="fineprint">Une page à la fois · Deux choix · Une histoire qui vous ressemble</p>
+        <div id="noteSlotHome"></div>
       </section>
     </section>
 
@@ -44,8 +46,10 @@
       </article>
       <nav class="review-row" aria-label="Relire les pages"><button id="prevBtn" class="ghost hidden">← Page précédente</button><button id="nextBtn" class="ghost hidden">Page suivante →</button><button id="currentBtn" class="ghost hidden">⤓ Page en cours</button></nav>
       <section class="choices-wrap"><h3>Que choisissez-vous ?</h3><div id="choices" class="choices"></div></section>
-      <p id="providerNote" class="provider-note"></p>
-      <p id="errorBox" class="error hidden" role="alert"></p>
+      <div id="noteSlotReader">
+        <p id="providerNote" class="provider-note"></p>
+        <p id="errorBox" class="error hidden" role="alert"></p>
+      </div>
     </section>
 
     <section id="libraryView" class="hidden">
