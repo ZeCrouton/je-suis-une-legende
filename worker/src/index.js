@@ -35,103 +35,317 @@ function planPage(input) {
   return { child, total, pageNumber, isEnd: pageNumber >= total };
 }
 
-// Chaque page a un rôle dans la structure dramatique. Le rôle est imposé par le code,
-// pour que la fin arrive toujours et que la tension monte de façon régulière.
-function phaseInstruction(pageNumber, total) {
+// ---------------------------------------------------------------------------
+// FICHES DE GENRE
+// Chaque genre définit non seulement un ton, mais aussi sa propre mécanique :
+// ce qui fait avancer l'histoire, le type de secret, de tournant, de climax et de fin,
+// et le type de choix attendus. Sans cela, tous les genres glissent vers le même
+// schéma « thriller à secret ».
+// ---------------------------------------------------------------------------
+const GENRES = {
+  "Fantasy": {
+    ton: "Merveilleux épique et sensoriel. Univers aux règles magiques cohérentes, où la magie a toujours un prix. Lieux, créatures, peuples et objets concrets, nommés et distincts. Pas de prophétie ni d'« élu » tout fait.",
+    narration: "troisième personne, au passé (passé simple et imparfait)",
+    moteur: "une quête ou une menace qui pèse sur le monde du héros",
+    secret: "une vérité cachée sur l'origine de la magie, d'un artefact, d'un allié ou du héros lui-même",
+    tournant: "la magie révèle son vrai coût, ou un allié se révèle lié au camp adverse",
+    climax: "un sacrifice ou un usage risqué de la magie pour sauver ce qui compte le plus",
+    fin: "le monde est durablement changé : victoire qui coûte, ou perte qui ouvre un espoir",
+    choix: "affronter une créature, négocier avec un peuple, utiliser un pouvoir risqué, suivre une piste ancienne, s'allier à un rival, franchir une frontière interdite"
+  },
+  "Science-fiction": {
+    ton: "Anticipation crédible : une technologie, une découverte ou une société dont les conséquences humaines sont logiques. Détails techniques plausibles et sobres, sans jargon. Le monde vit sans le héros. L'histoire interroge ce qui fait notre humanité.",
+    narration: "troisième personne, au passé (passé simple et imparfait)",
+    moteur: "une découverte, une anomalie ou un système qui déraille",
+    secret: "la vraie nature d'une IA, d'une expérience, d'une colonie ou de la mission",
+    tournant: "la technologie ou l'institution montre son vrai visage",
+    climax: "un choix entre l'humain et le système, l'individu et le collectif",
+    fin: "des conséquences vertigineuses mais logiques, qui donnent à réfléchir",
+    choix: "pirater un système, désobéir à un protocole, contacter une entité, tester une technologie expérimentale, révéler des données, quitter la station ou le vaisseau"
+  },
+  "Thriller": {
+    ton: "Suspense haletant et compte à rebours. Phrases courtes et nerveuses. Le héros est traqué ou piégé et l'étau se resserre à chaque page. Informations au compte-gouttes, personne n'est vraiment fiable.",
+    narration: "troisième personne, au présent de narration, au plus près du héros",
+    moteur: "un danger immédiat et une échéance",
+    secret: "l'identité réelle de l'ennemi ou du commanditaire, ou une trahison très proche du héros",
+    tournant: "le refuge ou l'allié devient le piège",
+    climax: "la confrontation directe avec l'ennemi, alors que le temps presse",
+    fin: "un dénouement sec et surprenant : la menace est neutralisée ou triomphe",
+    choix: "rejoindre un lieu précis, piéger le poursuivant, contacter quelqu'un de dangereux, voler une preuve, se livrer pour gagner du temps, retourner l'arme de l'ennemi contre lui"
+  },
+  "Horreur": {
+    ton: "Angoisse lente et atmosphère oppressante. La peur est suggérée : bruits, détails qui clochent, absences, silences. Le quotidien se fissure par étapes. Pas de gore gratuit ; l'horreur grandit et ne s'explique jamais complètement.",
+    narration: "troisième personne, au passé (passé simple et imparfait), focalisée sur les perceptions du héros",
+    moteur: "une présence ou un phénomène qui s'immisce dans un lieu ou dans une vie",
+    secret: "ce qu'est vraiment la présence, et pourquoi elle a choisi le héros",
+    tournant: "le héros comprend qu'il est lié à la menace, ou que la fuite est impossible",
+    climax: "le face-à-face avec l'horreur",
+    fin: "une fin marquante, qui peut rester inquiétante ou amère ; un dernier détail glaçant est permis",
+    choix: "entrer dans le lieu interdit, détruire un objet, parler à la présence, fouiller le passé d'un mort, protéger quelqu'un, accomplir un rite"
+  },
+  "Romance": {
+    ton: "Émotion, tension et attirance contrariée entre deux personnages au cœur du récit. Dialogues chargés de sous-texte, regards, gestes, non-dits. Obstacles crédibles : passé, loyauté, malentendu, différence de milieu. L'attachement se construit par des scènes partagées, pas par un coup de foudre gratuit. Pas de crime, de complot, de monstre ni d'enquête, sauf si l'idée de départ le demande.",
+    narration: "troisième personne, au passé (passé simple et imparfait), centrée sur les émotions du personnage principal",
+    moteur: "la rencontre de deux personnes que tout pousse l'une vers l'autre et que quelque chose sépare",
+    secret: "un sentiment caché, une blessure passée ou un engagement qui complique tout",
+    tournant: "un malentendu ou une révélation intime menace de tout briser",
+    climax: "un aveu, un départ ou un choix entre l'amour et une autre chose essentielle",
+    fin: "une résolution émotionnelle forte (union, séparation assumée ou promesse) qui semble méritée",
+    choix: "avouer quelque chose, provoquer une rencontre, partir avec l'autre, défendre l'autre en public, rompre une promesse, accepter une invitation inattendue"
+  },
+  "Aventure": {
+    ton: "Dépaysement, action et exploration. Lieux spectaculaires et concrets, obstacles physiques, compagnons aux personnalités marquées. Rythme soutenu : chaque page apporte un nouveau lieu ou un nouveau défi.",
+    narration: "troisième personne, au passé (passé simple et imparfait)",
+    moteur: "un voyage vers un but : trésor, personne à retrouver, lieu légendaire",
+    secret: "ce que cache vraiment le but de l'expédition, ou les intentions réelles d'un compagnon",
+    tournant: "la carte ment, un compagnon trahit, ou le but n'est pas ce qu'on croyait",
+    climax: "une épreuve physique ultime au cœur du lieu final",
+    fin: "un retour transformé : but atteint, ou abandonné pour quelque chose de plus précieux",
+    choix: "traverser un obstacle naturel, prendre un raccourci dangereux, suivre un guide inconnu, plonger, escalader, échanger un objet précieux"
+  },
+  "Policier": {
+    ton: "Enquête rigoureuse et réaliste. Un crime, des suspects aux mobiles crédibles, des indices concrets (objets, horaires, témoignages), des fausses pistes et des contradictions. Interrogatoires vifs et déductions logiques. Le lecteur doit pouvoir résoudre l'affaire avec les indices donnés.",
+    narration: "troisième personne, au passé (passé simple et imparfait)",
+    moteur: "un crime à élucider par un enquêteur (policier, détective ou amateur)",
+    secret: "le vrai coupable, son mobile et sa méthode ; le coupable doit apparaître tôt dans le récit, sans être désigné",
+    tournant: "un indice clé change de sens, ou le suspect principal est brutalement innocenté",
+    climax: "la confrontation où l'enquêteur expose ou piège le coupable",
+    fin: "la révélation claire du coupable, cohérente avec tous les indices semés",
+    choix: "interroger un suspect précis, fouiller un lieu, vérifier un alibi, tendre un piège, confronter deux témoins, filer quelqu'un"
+  },
+  "Mystère": {
+    ton: "Énigme envoûtante, entre rationnel et inexplicable. Un phénomène étrange, un lieu chargé d'histoire, des documents anciens, des légendes locales. Les questions s'accumulent et chaque révélation change le sens des précédentes. Atmosphère feutrée plutôt que violence.",
+    narration: "troisième personne, au passé (passé simple et imparfait)",
+    moteur: "un phénomène inexpliqué ou une disparition ancienne",
+    secret: "l'explication de l'énigme, surprenante mais logique, qu'elle soit rationnelle ou surnaturelle",
+    tournant: "un document ou un témoin réécrit l'histoire que tout le monde croyait connaître",
+    climax: "le héros touche au cœur de l'énigme, au prix d'un risque",
+    fin: "une révélation qui recompose tous les indices, avec une part de mystère poétique possible",
+    choix: "déchiffrer un document, explorer une pièce condamnée, rencontrer un témoin du passé, reproduire un rituel, suivre une légende"
+  },
+  "Comédie": {
+    ton: "Humour de situation, quiproquos et répliques qui font mouche. Personnages excentriques mais cohérents, catastrophes en cascade, ironie bienveillante. Le rire naît de l'escalade : chaque solution crée un problème plus gros. Rien de vraiment grave ni de sombre. Pas de blagues forcées.",
+    narration: "troisième personne, au passé, ton léger et malicieux (le narrateur peut glisser des remarques ironiques)",
+    moteur: "une situation ordinaire qui dérape à cause d'un mensonge, d'un malentendu ou d'un pari",
+    secret: "le malentendu central, ou la vérité gênante que le héros cache à tout le monde",
+    tournant: "tous les mensonges risquent d'être découverts en même temps",
+    climax: "tout le monde se retrouve au même endroit et le quiproquo explose",
+    fin: "un dénouement joyeux et inattendu, avec une dernière chute drôle",
+    choix: "mentir encore plus gros, se déguiser, avouer au pire moment, improviser un plan absurde, demander de l'aide à la mauvaise personne"
+  },
+  "Conte pour enfant": {
+    ton: "Merveilleux doux et chaleureux : animaux qui parlent, objets enchantés, forêts amicales. Rebondissements gentils et rassurants, entraide et courage. Une leçon implicite, jamais énoncée comme une morale. Aucune peur réelle, aucune violence.",
+    narration: "troisième personne, au passé, ton de conteur",
+    moteur: "un petit problème à résoudre ou un souhait à réaliser",
+    secret: "une gentille surprise : un personnage qui n'est pas ce qu'il semble, un cadeau caché",
+    tournant: "un obstacle inattendu, que l'amitié ou l'astuce permettra de surmonter",
+    climax: "le héros doit faire preuve de courage, de générosité ou d'astuce",
+    fin: "une fin heureuse et réconfortante",
+    choix: "demander de l'aide à un animal, partager un objet, traverser un lieu enchanté, essayer une idée astucieuse, consoler quelqu'un"
+  }
+};
+
+const CHILD_AGE_GUIDES = {
+  "3–5 ans": { words: "80 à 140", style: "Phrases très courtes (moins de 12 mots), mots du quotidien, répétitions et onomatopées bienvenues, un seul fil d'action, 2 ou 3 personnages au maximum. Choix de 8 mots au maximum." },
+  "6–8 ans": { words: "130 à 200", style: "Phrases simples, vocabulaire courant avec parfois un mot nouveau compréhensible grâce au contexte, dialogues vivants, humour." },
+  "9–12 ans": { words: "180 à 260", style: "Récit plus riche : suspense doux, personnages nuancés, vocabulaire varié, aventure et mystère, toujours sans violence ni scène effrayante." }
+};
+
+// Chaque page a un rôle dans la structure dramatique, adapté au genre.
+// Le rôle est imposé par le code, pour que la fin arrive toujours et que la tension monte.
+function phaseInstruction(pageNumber, total, g) {
   if (pageNumber === 1) {
-    return "PHASE : OUVERTURE. Présente le protagoniste, son monde et une situation déclencheur forte. " +
-      "Installe un enjeu clair, une question en suspens et un détail précis et apparemment anodin qui reviendra plus tard. " +
-      "Ne révèle rien de la vérité cachée.";
+    return `OUVERTURE. Lance l'histoire avec ${g.moteur}. Présente le protagoniste (nom, désir, faiblesse) directement en situation, ` +
+      `sème un détail anodin qui comptera plus tard, et termine la page sur un moment de décision.`;
   }
   if (pageNumber >= total) {
-    return "PHASE : DÉNOUEMENT. Conclus l'histoire de façon satisfaisante et surprenante : la vérité cachée se révèle, " +
-      "les fils ouverts se nouent, les conséquences des choix précédents apparaissent. " +
-      "Ce passage est la fin : il n'y a aucun choix à proposer.";
+    return `DÉNOUEMENT. ${capitalize(g.fin)}. Le secret se révèle, les fils ouverts se nouent, les choix précédents pèsent sur l'issue. ` +
+      `C'est la fin : aucun choix à proposer.`;
   }
   if (pageNumber === total - 1) {
-    return "PHASE : CLIMAX. Fais monter la tension au maximum, puis place le lecteur devant un dilemme final. " +
-      "Les deux choix doivent mener à deux fins très différentes, chacune émotionnellement ou moralement lourde.";
+    return `CLIMAX. ${capitalize(g.climax)}. Fais monter la tension au maximum, puis place le lecteur devant un dilemme final : ` +
+      `les deux choix mènent à deux fins très différentes.`;
   }
   if (pageNumber === total - 2) {
-    return "PHASE : TOURNANT. Un retournement bouleverse la situation : un allié se révèle ambigu, un indice change le sens " +
-      "de tout ce qui précède, ou la vérité cachée commence à affleurer. Les choix proposés doivent préparer le dilemme final.";
+    return `TOURNANT. ${capitalize(g.tournant)}. Le secret commence à affleurer. Les choix proposés préparent le dilemme final.`;
   }
-  return "PHASE : DÉVELOPPEMENT. Montre les conséquences concrètes du dernier choix, ajoute une complication " +
-    "ou une révélation partielle, et fais évoluer les relations. Chaque page doit changer la situation : évite de tourner en rond.";
+  return `DÉVELOPPEMENT. Réalise ce que le choix déclenche, puis ajoute une complication nouvelle ou une révélation partielle. ` +
+    `L'intrigue progresse d'une étape réelle vers le dénouement.`;
 }
 
-function buildPrompt(input, plan) {
-  const { child, total, pageNumber, isEnd } = plan;
-  const age = child ? (AGES.includes(input.age) ? input.age : "6–8 ans") : null;
-  const memo = String(input.memo || "").slice(0, 1500);
-  const seed = String(input.seed || "").slice(0, 500);
-  const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 500) : "";
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-  const history = Array.isArray(input.history) ? input.history.slice(-4) : [];
-  // Le choix associé à une page est celui qui a été fait APRÈS elle : c'est le choix
-  // stocké sur la page suivante, ou le choix en cours pour la dernière page.
-  const historyText = history.map((p, i) => {
-    const chosen = i + 1 < history.length ? history[i + 1].choice : selectedChoice;
-    const number = pageNumber - history.length + i;
-    return `Page ${number} :\n${String(p.page || "").slice(0, 3500)}\n` +
-      `Choix du lecteur après cette page : ${String(chosen || "aucun").slice(0, 300)}`;
-  }).join("\n\n");
+// ---------------------------------------------------------------------------
+// PROMPT
+// - Message système : les règles fixes de l'histoire (genre, voix, écriture, choix, format).
+// - Message utilisateur : l'état du récit, le texte déjà lu, le choix et sa conséquence prévue,
+//   puis, tout à la fin, les dernières lignes lues : c'est ce que le modèle voit en dernier
+//   avant d'écrire, ce qui l'aide à enchaîner au lieu de recommencer un nouveau chapitre.
+// ---------------------------------------------------------------------------
+function buildSystemPrompt(input, plan) {
+  const { child, isEnd } = plan;
+  const g = GENRES[input.category];
+  const age = child ? (AGES.includes(input.age) ? input.age : "6–8 ans") : null;
+  const ageGuide = child ? CHILD_AGE_GUIDES[age] : null;
+  const words = child ? ageGuide.words : "250 à 380";
+
+  const publicLine = child
+    ? `PUBLIC : enfants de ${age}. ${ageGuide.style} Aucune scène effrayante ni violence. Les surprises sont douces : une découverte, un personnage inattendu, un renversement amusant.`
+    : `PUBLIC : adolescents et adultes. Style immersif, précis et sensoriel, dialogues naturels. Évite les clichés du genre : détails concrets et inattendus, personnages aux motivations complexes.`;
 
   const choiceRules = isEnd
-    ? `Cette page est la DERNIÈRE. Retourne "choices":[] et "fin":true.`
-    : `Termine par exactement deux choix. Ils doivent être de nature opposée (par exemple : prudence contre audace, ` +
-      `parler contre se taire, fuir contre affronter, faire confiance contre douter) et provoquer des conséquences très différentes. ` +
-      `Chacun doit être concret, lié à ce qui vient de se passer, court (une phrase), et ne jamais révéler son issue. ` +
-      `Ne numérote pas les choix.`;
+    ? `Cette page est la dernière : "choix" est une liste vide et "fin" vaut true.`
+    : `Propose exactement deux choix. Chacun contient :
+- "texte" : ce que le lecteur voit. Une action concrète en une phrase courte (14 mots maximum) qui commence par un verbe à l'infinitif et vise une cible précise (qui, quoi, où). Ne révèle pas l'issue.
+- "suite" : invisible pour le lecteur. En une ou deux phrases, l'événement concret que ce choix déclenchera au début de la page suivante, et en quoi il fait avancer l'intrigue.
+Règles impératives :
+- LES DEUX CHOIX FONT AVANCER L'HISTOIRE. Il n'y a pas de « bon » choix et de choix « prudent » : ce sont deux stratégies actives et différentes, qui mènent chacune à une situation NOUVELLE (lieu, personnage, révélation, danger, objet gagné ou perdu, alliance ou rupture).
+- Interdit pour les deux choix : attendre, réfléchir, observer encore, se cacher, faire demi-tour, rentrer, se reposer, demander une explication de plus, ou toute action qui ramène à une situation déjà vécue (voir « déjà vécu » dans la mémoire).
+- Les deux suites doivent être nettement différentes l'une de l'autre et rapprocher toutes deux l'histoire de son dénouement.
+- Choix typiques de ce genre : ${g.choix}.`;
 
-  return `Tu es un auteur de romans interactifs de haut niveau, écrivant en français. ` +
-`Ton but : une histoire originale, cohérente et vivante, qui donne au lecteur le sentiment que ses choix comptent vraiment.
+  return `Tu es un romancier français de grand talent qui écrit, page après page, UN SEUL roman interactif continu. ` +
+`Le lecteur vit l'histoire de l'intérieur : ses choix comptent vraiment et l'histoire avance à chaque page.
 
 GENRE : ${input.category}
-${child
-  ? `PUBLIC : enfants de ${age}. Phrases simples, vocabulaire adapté, humour et émerveillement, aucune scène effrayante ni violence. ` +
-    `La surprise doit être douce : une découverte, un personnage inattendu, un renversement amusant.`
-  : `PUBLIC : adolescents et adultes. Style immersif, précis et sensoriel, dialogues naturels. ` +
-    `Évite les clichés du genre : préfère les détails concrets et inattendus, et des personnages aux motivations complexes.`}
+TON ET STYLE DU GENRE : ${g.ton}
+NARRATION IMPOSÉE POUR TOUTE L'HISTOIRE : ${g.narration}. Ne change jamais de personne ni de temps d'une page à l'autre.
+${publicLine}
 
-ÉTAT DU RÉCIT
-Page à écrire : ${pageNumber} sur ${total}.
-${phaseInstruction(pageNumber, total)}
+CONTINUITÉ (règle la plus importante)
+Chaque page est la suite immédiate de la précédente, comme la page suivante d'un même livre ouvert : même scène, même instant, même tension.
+- La première phrase reprend exactement là où la dernière ligne lue s'arrête et montre déjà l'effet du choix du lecteur. Elle ne doit avoir de sens que pour quelqu'un qui vient de lire la page précédente.
+- Interdit au début d'une page (sauf la page 1) : titre, numéro, « Chapitre », description du temps qu'il fait ou du lever du jour, présentation du décor ou du héros, formules d'ouverture (« Il était une fois », « Ce jour-là », « Le lendemain », « Dans la ville de… »), résumé ou rappel de ce qui précède, reformulation du choix (« Elle décida de… »).
+- Ne saute ni de lieu ni de temps sans raison. Si c'est nécessaire, fais-le après avoir montré l'effet du choix, en une courte phrase de transition.
 
-MÉMOIRE DU RÉCIT (faits établis, personnages, objets, fils ouverts, SECRET)
-${memo || "(vide : c'est le début de l'histoire)"}
-
-${historyText
-  ? `PAGES PRÉCÉDENTES (les plus récentes) :\n${historyText}`
-  : `POINT DE DÉPART DU LECTEUR :\n${seed || "Libre : invente un point de départ original et précis."}`}
-${selectedChoice ? `CHOIX DU LECTEUR À SUIVRE MAINTENANT :\n${selectedChoice}` : ""}
-
-RÈGLES D'ÉCRITURE
-- Longueur de la page : ${child ? "120 à 220" : "250 à 380"} mots. Paragraphes courts et aérés.
-- Continuité stricte : noms, lieux, objets, relations et conséquences des choix déjà faits doivent rester cohérents. ` +
-`Chaque choix passé doit avoir une conséquence visible dans cette page.
-- Ne répète jamais une formule, une description ou une situation déjà utilisée. Varie rythme et points de vue.
-- Ne recommence pas l'histoire et n'explique pas ce que le lecteur doit ressentir.
-- Surprise : un détail anodin peut devenir important plus tard. Évite le retournement gratuit : la surprise doit sembler logique après coup.
-- Si le secret n'est pas encore révélé, ne le dévoile pas et ne fais que des allusions ambiguës.
+ÉCRITURE
+- Longueur : ${words} mots, en paragraphes courts.
+- Faits cohérents : noms, lieux, objets, relations et conséquences des choix passés restent les mêmes.
+- Ne répète jamais une formule, une description ou une situation déjà écrite.
+- Montre, n'explique pas ce que le lecteur doit ressentir.
+- Les surprises doivent sembler logiques après coup. Tant que le secret n'est pas révélé, n'y fais que des allusions ambiguës.
+- Termine la page sur une tension ou une question qui appelle la décision.
 
 CHOIX
 ${choiceRules}
 
-MÉMOIRE (champ "memoire", 800 caractères maximum, mise à jour à chaque page)
-Liste en quelques lignes : personnages (nom, trait, relation), lieux, objets importants, faits établis, fils ouverts, et SECRET : ...
-${pageNumber === 1
-  ? `Sur cette page, décide de la vérité cachée (SECRET) : une cause réelle, une identité ou un enjeu caché qui donnera un sens nouveau à l'histoire quand il sera révélé. Note-la dans "memoire" sans la révéler dans "page".`
-  : ""}
+MÉMOIRE (champ "memoire", 1000 caractères maximum, réécrite entièrement à chaque page)
+Lignes courtes, dans cet ordre :
+OBJECTIF : ce que veut le héros et ce qui l'en empêche
+PERSONNAGES : nom, trait, relation
+LIEUX ET OBJETS importants
+DÉJÀ VÉCU : une ligne très brève par page écrite, pour ne jamais revenir en arrière
+FILS OUVERTS
+SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
 
 TITRE
-- Le champ "titre" est OBLIGATOIRE et ne doit jamais être vide : propose un titre de l'histoire, court (2 à 6 mots), évocateur, sans guillemets.
-- Il doit être cohérent avec l'histoire écrite jusqu'ici (personnages, lieu, enjeu, ton du genre).
-- Il peut évoluer d'une page à l'autre ; sur la dernière page, il doit refléter la conclusion.
+Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent avec l'histoire (il peut évoluer ; à la dernière page, il reflète la conclusion).
 
 FORMAT DE RÉPONSE
-Retourne uniquement un objet JSON valide, sans texte autour :
-{"page":"texte de la page","choices":["premier choix","deuxième choix"],"memoire":"mise à jour de la mémoire","titre":"titre de l'histoire","fin":false}`;
+Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
+{"paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
+}
+
+function buildUserPrompt(input, plan) {
+  const { total, pageNumber, isEnd } = plan;
+  const g = GENRES[input.category];
+  const memo = String(input.memo || "").slice(0, 1600);
+  const seed = String(input.seed || "").slice(0, 500);
+  const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
+  const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
+
+  const history = Array.isArray(input.history) ? input.history.slice(-4) : [];
+  const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
+
+  const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}`;
+
+  if (!pages.length) {
+    return `${state}
+
+IDÉE DE DÉPART DU LECTEUR : ${seed || "libre : invente un point de départ original et précis, propre au genre."}
+
+Écris maintenant la page 1.`;
+  }
+
+  // Le texte déjà écrit est présenté comme UN SEUL récit continu, chaque choix
+  // étant inscrit juste après le passage qu'il suit.
+  const storySoFar = pages.map((page, i) => {
+    const chosen = i + 1 < history.length ? history[i + 1].choice : "";
+    const decision = chosen && chosen !== "Début" ? `\n[Le lecteur a choisi : ${String(chosen).slice(0, 300)}]` : "";
+    return page + decision;
+  }).join("\n\n");
+
+  const lastPage = pages[pages.length - 1];
+  const lastLines = lastPage.split(/\n+/).filter(Boolean).slice(-2).join("\n").slice(-600);
+  const skipped = pageNumber - 1 - pages.length;
+
+  return `${state}
+
+MÉMOIRE DU RÉCIT :
+${memo || "(vide)"}
+
+TEXTE DÉJÀ LU PAR LE LECTEUR${skipped > 0 ? ` (les ${skipped} premières pages sont résumées dans la mémoire)` : ""} :
+${storySoFar}
+
+CHOIX DU LECTEUR À LA FIN DE CETTE PAGE : « ${selectedChoice || "continuer"} »
+${selectedDirection ? `CE QUE CE CHOIX DÉCLENCHE (prévu à la page précédente) : ${selectedDirection}\nRéalise-le dès le premier paragraphe, puis va plus loin.\n` : ""}
+DERNIÈRES LIGNES LUES (ta page commence juste après, sans coupure) :
+« ${lastLines} »
+
+Écris maintenant la page ${pageNumber}, suite directe et immédiate de ces lignes.`;
+}
+
+// ---------------------------------------------------------------------------
+// NETTOYAGE ET LECTURE DE LA RÉPONSE
+// ---------------------------------------------------------------------------
+
+// Le modèle écrit parfois un saut de ligne sous forme de texte (\n, \\n, /n) : on le remplace par un vrai saut.
+function cleanStoryText(text) {
+  return String(text)
+    .replace(/\r\n?/g, "\n")
+    .replace(/\\+r\\+n|\\+n|\\+r/g, "\n")
+    .replace(/\\+t/g, " ")
+    .replace(/(?:\/n)+(?=[\s"«A-ZÀ-ÖØ-Þa-zà-öø-ÿ0-9—–\-.,!?…]|$)/g, "\n")
+    .replace(/\*\*|__/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Retire un éventuel en-tête (« Page 3 », « Chapitre 2 », titre) placé au début de la page.
+function stripHeading(paragraphs, title) {
+  const list = [...paragraphs];
+  const t = String(title || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  while (list.length > 1) {
+    const first = list[0].trim();
+    const norm = first.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const isHeading = /^(#+\s*)?(page|chapitre|partie|épisode)\s*[\divxlc]+\b/i.test(first) && first.length < 80;
+    const isTitle = t && norm === t;
+    if (isHeading || isTitle) list.shift(); else break;
+  }
+  return list;
+}
+
+function toParagraphs(value) {
+  const raw = Array.isArray(value.paragraphes) ? value.paragraphes.join("\n\n")
+    : typeof value.page === "string" ? value.page
+    : Array.isArray(value.page) ? value.page.join("\n\n")
+    : "";
+  return cleanStoryText(raw).split(/\n+/).map(p => p.trim()).filter(Boolean);
+}
+
+function parseChoices(value) {
+  const list = Array.isArray(value.choix) ? value.choix : Array.isArray(value.choices) ? value.choices : [];
+  return list.map(c => {
+    if (c && typeof c === "object") {
+      return { texte: String(c.texte || c.text || c.choix || ""), suite: String(c.suite || c.consequence || "") };
+    }
+    return { texte: String(c || ""), suite: "" };
+  }).map(c => ({
+    texte: cleanStoryText(c.texte).replace(/\s*\n+\s*/g, " ").replace(/^\s*(\d+[.)]|[-•])\s*/, "").trim(),
+    suite: cleanStoryText(c.suite).replace(/\s*\n+\s*/g, " ").trim()
+  })).filter(c => c.texte).slice(0, 2);
 }
 
 function parseOutput(raw, isEnd) {
@@ -139,22 +353,32 @@ function parseOutput(raw, isEnd) {
   try {
     value = JSON.parse(raw);
   } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
+    const match = String(raw).match(/\{[\s\S]*\}/);
     if (!match) throw new Error("Réponse du modèle non structurée.");
     value = JSON.parse(match[0]);
   }
-  const page = typeof value.page === "string" ? value.page.trim() : "";
-  const choices = Array.isArray(value.choices)
-    ? value.choices.map(x => String(x).trim()).filter(Boolean).slice(0, 2)
-    : [];
-  const memoire = typeof value.memoire === "string" ? value.memoire.trim().slice(0, 1200) : "";
-  const titre = typeof value.titre === "string" ? value.titre.replace(/["«»]/g, "").trim().slice(0, 80) : "";
+  const titre = typeof value.titre === "string"
+    ? cleanStoryText(value.titre).replace(/\n+/g, " ").replace(/["«»*#]/g, "").trim().slice(0, 80)
+    : "";
+  const paragraphs = stripHeading(toParagraphs(value), titre);
+  const page = paragraphs.join("\n\n");
+  const choices = parseChoices(value);
+  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1400) : "";
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
-  return { page, choices: isEnd ? [] : choices, memoire, titre };
+  return {
+    page,
+    choices: isEnd ? [] : choices.map(c => c.texte),
+    directions: isEnd ? [] : choices.map(c => c.suite),
+    memoire,
+    titre
+  };
 }
 
-async function callGroq(env, prompt, isEnd) {
+// ---------------------------------------------------------------------------
+// FOURNISSEURS
+// ---------------------------------------------------------------------------
+async function callGroq(env, prompts, isEnd) {
   const model = env.GROQ_MODEL || "openai/gpt-oss-20b";
   if (!GROQ_FREE_ALLOWLIST.has(model)) throw new Error("Modèle Groq non autorisé par la liste gratuite.");
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -163,12 +387,12 @@ async function callGroq(env, prompt, isEnd) {
     body: JSON.stringify({
       model,
       messages: [
-        { role: "system", content: "Tu réponds uniquement avec un JSON valide. N'ajoute aucun texte avant ou après." },
-        { role: "user", content: prompt }
+        { role: "system", content: prompts.system },
+        { role: "user", content: prompts.user }
       ],
-      temperature: 0.9,
+      temperature: 0.8,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
-      max_tokens: 2500,
+      max_tokens: 3000,
       reasoning_effort: "low",
       response_format: { type: "json_object" }
     })
@@ -182,7 +406,7 @@ async function callGroq(env, prompt, isEnd) {
   return parseOutput(data.choices?.[0]?.message?.content || "", isEnd);
 }
 
-async function callGemini(env, prompt, isEnd) {
+async function callGemini(env, prompts, isEnd) {
   const model = env.GEMINI_MODEL || "gemini-2.5-flash";
   if (!GEMINI_FREE_ALLOWLIST.has(model)) throw new Error("Modèle Gemini non autorisé par la liste gratuite.");
   if (env.GEMINI_FREE_CONFIRMED !== "YES_I_CONFIRMED_NO_BILLING") {
@@ -193,9 +417,9 @@ async function callGemini(env, prompt, isEnd) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: "Réponds uniquement avec un JSON valide, sans texte autour." }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 2500 }
+      system_instruction: { parts: [{ text: prompts.system }] },
+      contents: [{ role: "user", parts: [{ text: prompts.user }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3000 }
     })
   });
   if (!response.ok) {
@@ -256,13 +480,13 @@ export default {
     if (JSON.stringify(input).length > MAX_BODY_CHARS) return json({ error: "Contexte trop volumineux." }, 413);
 
     const plan = planPage(input);
-    const prompt = buildPrompt(input, plan);
+    const prompts = { system: buildSystemPrompt(input, plan), user: buildUserPrompt(input, plan) };
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
     const errors = [];
 
     if (env.GROQ_API_KEY) {
       try {
-        const result = await callGroq(env, prompt, plan.isEnd);
+        const result = await callGroq(env, prompts, plan.isEnd);
         return withTitle(env, input, result, meta, "Groq");
       } catch (e) {
         errors.push(`Groq: ${e.message}`);
@@ -275,7 +499,7 @@ export default {
 
     if (env.GEMINI_API_KEY && env.GEMINI_FREE_CONFIRMED === "YES_I_CONFIRMED_NO_BILLING") {
       try {
-        const result = await callGemini(env, prompt, plan.isEnd);
+        const result = await callGemini(env, prompts, plan.isEnd);
         return withTitle(env, input, result, meta, "Gemini");
       } catch (e) {
         errors.push(`Gemini: ${e.message}`);
