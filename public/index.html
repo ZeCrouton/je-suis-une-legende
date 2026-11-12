@@ -29,6 +29,13 @@
         </div>
         <label class="field-label" for="seed">Une idée de départ (facultatif)</label>
         <textarea id="seed" rows="2" placeholder="Ex. : Une jeune exploratrice découvre une île qui n'apparaît sur aucune carte…"></textarea>
+        <div class="hero-option">
+          <button id="heroToggle" type="button" class="ghost hero-toggle" aria-pressed="false" aria-controls="heroField">🦸 Je veux être le héros du roman</button>
+          <div id="heroField" class="hero-field hidden">
+            <label for="heroName">Quel est votre prénom ?</label>
+            <input id="heroName" type="text" maxlength="30" autocomplete="given-name" placeholder="Ex. : Léa">
+          </div>
+        </div>
         <button id="startBtn" class="primary wide">Commencer l'aventure <span>→</span></button>
         <p class="fineprint">Une page à la fois · Deux choix · Une histoire qui vous ressemble</p>
         <div id="noteSlotHome"></div>

@@ -23,6 +23,15 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: corsHeaders });
 }
 
+// Prénom du lecteur-héros : lettres, espaces, tirets et apostrophes uniquement (4 mots maximum).
+// Tout le reste est ignoré : ce texte est inséré dans la consigne donnée à l'IA.
+function cleanHero(value) {
+  const name = String(value || "").normalize("NFC").replace(/\s+/g, " ").trim().slice(0, 30);
+  if (!/^\p{L}[\p{L}\p{M}'’ -]*$/u.test(name)) return "";
+  if (name.split(" ").length > 4) return "";
+  return name.replace(/(^|[\s'’-])(\p{L})/gu, (m, sep, letter) => sep + letter.toUpperCase());
+}
+
 function planPage(input) {
   const child = input.category === "Conte pour enfant";
   const total = child ? TOTAL_PAGES_CHILD : TOTAL_PAGES_ADULT;
@@ -189,6 +198,13 @@ function buildSystemPrompt(input, plan) {
     ? `PUBLIC : enfants de ${age}. ${ageGuide.style} Aucune scène effrayante ni violence. Les surprises sont douces : une découverte, un personnage inattendu, un renversement amusant.`
     : `PUBLIC : adolescents et adultes. Style immersif, précis et sensoriel, dialogues naturels. Évite les clichés du genre : détails concrets et inattendus, personnages aux motivations complexes.`;
 
+  const hero = cleanHero(input.hero);
+  const heroLine = hero
+    ? `HÉROS : le lecteur est le héros de l'histoire et il s'appelle ${hero}. Le protagoniste, c'est ${hero} : nomme-le dès la première phrase de la page 1, garde ce prénom du début à la fin, ` +
+      `et fais vivre les choix proposés par lui. Les autres personnages portent d'autres prénoms. Inscris-le en tête de PERSONNAGES dans la mémoire (« ${hero}, le héros »). ` +
+      `Si le genre de « ${hero} » n'est pas évident, évite les accords et pronoms genrés en répétant le prénom ou en tournant autrement la phrase.\n`
+    : "";
+
   const choiceRules = isEnd
     ? `Cette page est la dernière : "choix" est une liste vide et "fin" vaut true.`
     : `Propose exactement deux choix. Chacun contient :
@@ -207,7 +223,7 @@ GENRE : ${input.category}
 TON ET STYLE DU GENRE : ${g.ton}
 NARRATION IMPOSÉE POUR TOUTE L'HISTOIRE : ${g.narration}. Ne change jamais de personne ni de temps d'une page à l'autre.
 ${publicLine}
-
+${heroLine}
 CONTINUITÉ (règle la plus importante)
 Chaque page est la suite immédiate de la précédente, comme la page suivante d'un même livre ouvert : même scène, même instant, même tension.
 - La première phrase reprend exactement là où la dernière ligne lue s'arrête et montre déjà l'effet du choix du lecteur. Elle ne doit avoir de sens que pour quelqu'un qui vient de lire la page précédente.
@@ -253,7 +269,9 @@ function buildUserPrompt(input, plan, maxPages = 3) {
   const history = Array.isArray(input.history) ? input.history.slice(-maxPages) : [];
   const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
 
-  const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}`;
+  const hero = cleanHero(input.hero);
+  const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}` +
+    (hero ? `\nPRÉNOM DU HÉROS (le lecteur) : ${hero}` : "");
 
   if (!pages.length) {
     return `${state}

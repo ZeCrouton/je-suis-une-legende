@@ -99,6 +99,7 @@ async function generate(choiceIndex = null) {
     category: currentStory.category,
     age: currentStory.age,
     seed: currentStory.seed,
+    hero: currentStory.hero || "",
     // Seules les 3 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
     history: currentStory.pages.slice(-3).map(p => ({ page: p.page, choice: p.choice })),
     pageNumber: currentStory.pages.length + 1,
@@ -322,7 +323,40 @@ function renderStory(atIndex){
   show("readerView");
 }
 
+// « Je veux être le héros du roman » : le prénom est mémorisé pour les prochaines histoires.
+const HERO_KEY = "recitsChoixHero";
+function setHeroMode(on){
+  $("heroToggle").setAttribute("aria-pressed", String(on));
+  $("heroField").classList.toggle("hidden", !on);
+}
+function saveHeroPrefs(){
+  try { localStorage.setItem(HERO_KEY, JSON.stringify({ on: $("heroToggle").getAttribute("aria-pressed") === "true", name: $("heroName").value.trim() })); } catch {}
+}
+function loadHeroPrefs(){
+  try {
+    const prefs = JSON.parse(localStorage.getItem(HERO_KEY) || "null");
+    if (!prefs) return;
+    $("heroName").value = String(prefs.name || "").slice(0, 30);
+    setHeroMode(prefs.on === true);
+  } catch {}
+}
+$("heroToggle").addEventListener("click", () => {
+  const on = $("heroToggle").getAttribute("aria-pressed") !== "true";
+  setHeroMode(on);
+  saveHeroPrefs();
+  if (on) $("heroName").focus();
+});
+$("heroName").addEventListener("input", saveHeroPrefs);
+
 $("startBtn").addEventListener("click",async()=>{
+  const heroOn = $("heroToggle").getAttribute("aria-pressed") === "true";
+  const hero = heroOn ? $("heroName").value.trim() : "";
+  if (heroOn && !hero) {
+    showError("Écrivez votre prénom pour devenir le héros du roman, ou désactivez cette option.");
+    $("heroName").focus();
+    return;
+  }
+  $("errorBox").classList.add("hidden");
   const previousStory = currentStory;
   const previousIndex = displayedIndex;
   currentStory = {
@@ -330,6 +364,7 @@ $("startBtn").addEventListener("click",async()=>{
     category: selectedCategory,
     age: $("ageSelect").value,
     seed: $("seed").value.trim(),
+    hero,
     title: "",
     pages: [],
     memo: "",
@@ -398,4 +433,5 @@ function restoreState(){
 }
 $("resumeBtn").addEventListener("click", () => renderStory(displayedIndex ?? undefined));
 placeNotes("homeView");
+loadHeroPrefs();
 renderCategories(); updateCount(); restoreState();
