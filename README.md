@@ -8,6 +8,10 @@ Application web de romans interactifs « Je suis une légende ». Interface stat
 - Longueur d'un récit complet : 10 pages (adolescents et adultes) ou 7 pages (conte enfant).
 - Structure dramatique imposée par le code : ouverture, développement, tournant, climax, dénouement.
 - Mémoire du récit renvoyée à chaque page (personnages, faits, fils ouverts, secret) pour garder la cohérence.
+- Fiches de genre complètes : ton, narration imposée (personne et temps), moteur, secret, tournant, climax, fin et choix typiques propres à chaque genre.
+- Continuité : la page suivante reprend exactement après les dernières lignes lues.
+- Choix à conséquence : pour chaque choix, l'IA prévoit en secret ce qu'il déclenche ; la page suivante doit le réaliser. Les deux choix font avancer l'histoire.
+- Relecture de toutes les pages précédentes, sans pouvoir modifier les choix déjà faits.
 - Mode conte enfant avec tranches d'âge 3–5, 6–8 et 9–12 ans.
 - Bibliothèque locale : les histoires sont enregistrées dans le navigateur (localStorage).
 - Clés API conservées côté Worker, jamais envoyées au navigateur.
