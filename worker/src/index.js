@@ -9,9 +9,6 @@ const AGES = ["3–5 ans", "6–8 ans", "9–12 ans"];
 const TOTAL_PAGES_ADULT = 10;
 const TOTAL_PAGES_CHILD = 7;
 
-// Modèles explicitement autorisés pour cette version.
-// À vérifier régulièrement dans les pages tarifaires et de modèles officielles.
-const GROQ_FREE_ALLOWLIST = new Set(["openai/gpt-oss-20b"]);
 
 const MAX_BODY_CHARS = 40000;
 
@@ -375,11 +372,115 @@ function parseOutput(raw, isEnd) {
 }
 
 // ---------------------------------------------------------------------------
-// FOURNISSEURS
+// FOURNISSEURS ET MODÈLES GRATUITS
+// Ordre : modèles Groq (plan Free), puis modèles Gemini du niveau gratuit.
+// Chaque modèle a son propre quota : quand l'un est épuisé, on passe au suivant.
+// Les listes sont mises à jour automatiquement à partir des modèles réellement
+// disponibles sur chaque compte (un modèle retiré est ignoré, un nouveau modèle
+// d'une famille gratuite est pris en compte).
 // ---------------------------------------------------------------------------
-async function callGroq(env, prompts, isEnd) {
-  const model = env.GROQ_MODEL || "openai/gpt-oss-20b";
-  if (!GROQ_FREE_ALLOWLIST.has(model)) throw new Error("Modèle Groq non autorisé par la liste gratuite.");
+
+// Groq : par ordre de préférence. Sur le plan Free, tous les modèles sont gratuits.
+const GROQ_PREFERENCES = [
+  /^openai\/gpt-oss-20b$/,
+  /^openai\/gpt-oss-120b$/,
+  /^qwen\/qwen3[\w.-]*$/,
+  /^llama-3\.3-70b-versatile$/,
+  /^meta-llama\/llama-4-(maverick|scout)[\w.-]*$/
+];
+const GROQ_DEFAULTS = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"];
+
+// Gemini : uniquement les familles Flash et Flash-Lite, qui ont un niveau gratuit.
+// Exclus : Pro, modèles d'image, de son, de vidéo, « Omni » et expérimentaux (payants ou très limités).
+const GEMINI_EXCLUDE = /(pro|image|tts|audio|live|embedding|omni|computer|veo|imagen|lyria|exp|thinking)/i;
+const GEMINI_DEFAULTS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
+const MODEL_LIST_TTL_MS = 6 * 3600 * 1000;
+const modelCache = { groq: null, gemini: null };   // { at, list }
+const exhausted = new Map();                       // "fournisseur:modèle" -> fin du blocage (ms)
+
+function isExhausted(key) {
+  const until = exhausted.get(key);
+  if (!until) return false;
+  if (Date.now() >= until) { exhausted.delete(key); return false; }
+  return true;
+}
+
+async function groqModels(env) {
+  if (modelCache.groq && Date.now() - modelCache.groq.at < MODEL_LIST_TTL_MS) return modelCache.groq.list;
+  let list = GROQ_DEFAULTS;
+  try {
+    const r = await fetch("https://api.groq.com/openai/v1/models", { headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}` } });
+    if (r.ok) {
+      const ids = ((await r.json()).data || []).filter(m => m.active !== false).map(m => m.id);
+      const ordered = [];
+      for (const pattern of GROQ_PREFERENCES) {
+        ids.filter(id => pattern.test(id)).sort().reverse().forEach(id => { if (!ordered.includes(id)) ordered.push(id); });
+      }
+      if (ordered.length) list = ordered;
+    }
+  } catch { /* liste par défaut */ }
+  modelCache.groq = { at: Date.now(), list };
+  return list;
+}
+
+// Trie les modèles Gemini : version la plus récente d'abord, Flash avant Flash-Lite, stable avant preview.
+function geminiRank(name) {
+  const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+  const lite = /lite/.test(name) ? 1 : 0;
+  const preview = /preview|latest/.test(name) ? 1 : 0;
+  return [-version, lite, preview, name.length];
+}
+
+async function geminiModels(env) {
+  if (modelCache.gemini && Date.now() - modelCache.gemini.at < MODEL_LIST_TTL_MS) return modelCache.gemini.list;
+  let list = GEMINI_DEFAULTS;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${env.GEMINI_API_KEY}`);
+    if (r.ok) {
+      const names = ((await r.json()).models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+        .map(m => String(m.name).replace(/^models\//, ""))
+        .filter(n => /^gemini-[\d.]+-flash/.test(n) && !GEMINI_EXCLUDE.test(n))
+        // Une seule version datée par famille : on préfère le nom court (alias stable).
+        .filter(n => !/-\d{3}$|-\d{2}-\d{4}$/.test(n));
+      names.sort((a, b) => {
+        const ra = geminiRank(a), rb = geminiRank(b);
+        for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] < rb[i] ? -1 : 1;
+        return 0;
+      });
+      if (names.length) list = names.slice(0, 4);
+    }
+  } catch { /* liste par défaut */ }
+  modelCache.gemini = { at: Date.now(), list };
+  return list;
+}
+
+async function httpError(provider, response) {
+  const error = new Error(`${provider} HTTP ${response.status}`);
+  error.status = response.status;
+  error.retryAfter = retryAfterSeconds(response.headers);
+  const body = await response.text().catch(() => "");
+  let message = "";
+  try { message = JSON.parse(body)?.error?.message || ""; } catch { message = body; }
+  error.apiMessage = String(message).slice(0, 300);
+  if (error.retryAfter === null) {
+    // Gemini indique le délai dans le message (« Please retry in 37.5s »).
+    const m = error.apiMessage.match(/retry in ([\d.]+)\s*s/i);
+    if (m) error.retryAfter = Number(m[1]);
+  }
+  if (/per day|\(TPD\)|\(RPD\)|PerDay/i.test(error.apiMessage)) error.limit = "jour";
+  else if (/per minute|\(TPM\)|\(RPM\)|PerMinute/i.test(error.apiMessage)) error.limit = "minute";
+  return error;
+}
+
+function groqParams(model) {
+  if (/gpt-oss/.test(model)) return { reasoning_effort: "low" };
+  if (/qwen3/.test(model)) return { reasoning_effort: "none" };
+  return {};
+}
+
+async function callGroq(env, model, prompts, isEnd) {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
@@ -392,26 +493,38 @@ async function callGroq(env, prompts, isEnd) {
       temperature: 0.8,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
       max_tokens: 2200,
-      reasoning_effort: "low",
+      ...groqParams(model),
       response_format: { type: "json_object" }
     })
   });
-  if (!response.ok) {
-    const error = new Error(`Groq HTTP ${response.status}`);
-    error.status = response.status;
-    // Groq indique combien de temps attendre avant que le quota se libère,
-    // et dans son message quelle limite est atteinte (par minute ou par jour).
-    error.retryAfter = retryAfterSeconds(response.headers);
-    const body = await response.text().catch(() => "");
-    let message = "";
-    try { message = JSON.parse(body)?.error?.message || ""; } catch { message = body; }
-    error.groqMessage = String(message).slice(0, 400);
-    if (/per day|\(TPD\)|\(RPD\)/i.test(error.groqMessage)) error.limit = "jour";
-    else if (/per minute|\(TPM\)|\(RPM\)/i.test(error.groqMessage)) error.limit = "minute";
-    throw error;
-  }
+  if (!response.ok) throw await httpError("Groq", response);
   const data = await response.json();
   return parseOutput(data.choices?.[0]?.message?.content || "", isEnd);
+}
+
+async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 2500 };
+  // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
+  if (withThinkingConfig) {
+    generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompts.system }] },
+      contents: [{ role: "user", parts: [{ text: prompts.user }] }],
+      generationConfig
+    })
+  });
+  if (!response.ok) {
+    // Si ce modèle refuse le réglage de réflexion, on réessaie une fois sans.
+    if (response.status === 400 && withThinkingConfig) return callGemini(env, model, prompts, isEnd, false);
+    throw await httpError("Gemini", response);
+  }
+  const data = await response.json();
+  return parseOutput(data.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map(p => p.text || "").join("") || "", isEnd);
 }
 
 // Lit le délai d'attente renvoyé par Groq : « retry-after » (secondes) ou
@@ -437,10 +550,89 @@ function parseDuration(text) {
 
 const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
+// Liste ordonnée des moteurs à essayer pour cette requête.
+async function engineChain(env) {
+  const chain = [];
+  if (env.GROQ_API_KEY) (await groqModels(env)).forEach(model => chain.push({ provider: "Groq", model }));
+  if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
+  return chain;
+}
+
+function callEngine(env, engine, prompts, isEnd) {
+  return engine.provider === "Groq"
+    ? callGroq(env, engine.model, prompts, isEnd)
+    : callGemini(env, engine.model, prompts, isEnd);
+}
+
+function shortModel(model) {
+  return model.replace(/^(openai|meta-llama|qwen)\//, "");
+}
+
+// Génère la page avec le premier moteur disponible, en basculant sur le suivant
+// dès qu'un quota est atteint ou qu'un modèle ne répond pas correctement.
+async function generateWithFallback(env, input, plan) {
+  const system = buildSystemPrompt(input, plan);
+  const chain = await engineChain(env);
+  const errors = [];
+  const quotaWaits = [];
+  let lastLimit = null;
+
+  const tryEngine = async engine => {
+    const key = `${engine.provider}:${engine.model}`;
+    let maxPages = 3;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) }, plan.isEnd);
+        return { ...result, provider: `${engine.provider} · ${shortModel(engine.model)}` };
+      } catch (e) {
+        errors.push(`${engine.provider} ${engine.model}: ${e.message}${e.apiMessage ? ` (${e.apiMessage})` : ""}`);
+        // Requête trop grosse pour ce modèle : une page d'historique en moins.
+        if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
+        // Quota atteint : ce modèle est mis de côté jusqu'à la fin du délai, on passe au suivant.
+        if (e.status === 429 || e.status === 413) {
+          const wait = e.retryAfter ?? 60;
+          exhausted.set(key, Date.now() + wait * 1000);
+          quotaWaits.push({ engine, wait });
+          if (e.limit) lastLimit = e.limit;
+          return null;
+        }
+        // Réponse mal formée : on réessaie une fois le même modèle.
+        if (e.status === undefined && attempt < 2) continue;
+        return null;
+      }
+    }
+    return null;
+  };
+
+  for (const engine of chain) {
+    if (isExhausted(`${engine.provider}:${engine.model}`)) {
+      errors.push(`${engine.provider} ${engine.model}: quota en pause`);
+      continue;
+    }
+    const result = await tryEngine(engine);
+    if (result) return { result };
+  }
+
+  // Tous les modèles sont épuisés : si l'un se libère très vite, on l'attend une fois.
+  const soonest = quotaWaits.sort((a, b) => a.wait - b.wait)[0];
+  if (soonest && soonest.wait <= 12) {
+    await sleep(soonest.wait + 0.3);
+    exhausted.delete(`${soonest.engine.provider}:${soonest.engine.model}`);
+    const result = await tryEngine(soonest.engine);
+    if (result) return { result };
+  }
+
+  const pausedUntil = [...exhausted.values()].filter(t => t > Date.now());
+  const retryAfter = soonest
+    ? Math.ceil(Math.min(soonest.wait, ...pausedUntil.map(t => (t - Date.now()) / 1000)))
+    : pausedUntil.length ? Math.ceil(Math.min(...pausedUntil.map(t => (t - Date.now()) / 1000))) : null;
+  return { errors, retryAfter, limit: lastLimit, quota: retryAfter !== null };
+}
+
 // Secours : si le modèle n'a pas fourni de titre, on en demande un à part, à partir du passage.
 async function requestTitle(env, category, page, memo) {
-  const model = env.GROQ_MODEL || "openai/gpt-oss-20b";
-  if (!env.GROQ_API_KEY || !GROQ_FREE_ALLOWLIST.has(model)) return "";
+  const model = (await groqModels(env))[0];
+  if (!env.GROQ_API_KEY || !model || isExhausted(`Groq:${model}`)) return "";
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
@@ -454,7 +646,7 @@ async function requestTitle(env, category, page, memo) {
       ],
       temperature: 0.7,
       max_tokens: 300,
-      reasoning_effort: "low"
+      ...groqParams(model)
     })
   });
   if (!response.ok) return "";
@@ -463,22 +655,14 @@ async function requestTitle(env, category, page, memo) {
   return raw.replace(/["«»*#]/g, "").replace(/[.!?:]+$/, "").trim().slice(0, 80);
 }
 
-async function withTitle(env, input, result, meta, provider) {
-  let titre = result.titre;
-  if (!titre) {
-    titre = await requestTitle(env, input.category, result.page, result.memoire).catch(() => "");
-  }
-  return json({ ...result, titre, ...meta, provider });
-}
-
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
     const url = new URL(request.url);
-    if (url.pathname === "/health") return json({ ok: true, freeOnly: env.FREE_ONLY === "true" });
+    if (url.pathname === "/health") return json({ ok: true, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
     if (url.pathname !== "/api/story" || request.method !== "POST") return json({ error: "Not found" }, 404);
     if (env.FREE_ONLY !== "true") return json({ error: "Génération bloquée : le mode gratuit strict n'est pas activé." }, 503);
-    if (!env.GROQ_API_KEY) return json({ error: "Aucune clé Groq n'est configurée." }, 503);
+    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: "Aucune clé IA n'est configurée." }, 503);
 
     let input;
     try { input = await request.json(); } catch { return json({ error: "Requête JSON invalide." }, 400); }
@@ -486,44 +670,23 @@ export default {
     if (JSON.stringify(input).length > MAX_BODY_CHARS) return json({ error: "Contexte trop volumineux." }, 413);
 
     const plan = planPage(input);
-    const system = buildSystemPrompt(input, plan);
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
-    const errors = [];
+    const outcome = await generateWithFallback(env, input, plan);
 
-    // Le Worker réessaie lui-même, au plus juste, avant de rendre la main au navigateur :
-    // - quota dépassé (429) : il attend exactement le délai indiqué par Groq, s'il est court ;
-    // - requête trop grosse (413) : il réessaie aussitôt avec une page d'historique en moins ;
-    // - réponse mal formée : il réessaie aussitôt.
-    let maxPages = 3;
-    let waited = 0;
-    let lastError = null;
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      try {
-        const prompts = { system, user: buildUserPrompt(input, plan, maxPages) };
-        const result = await callGroq(env, prompts, plan.isEnd);
-        return withTitle(env, input, result, meta, "Groq");
-      } catch (e) {
-        lastError = e;
-        errors.push(`Groq: ${e.message}${e.groqMessage ? ` (${e.groqMessage})` : ""}`);
-        if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
-        if (e.status === 429 && e.retryAfter !== null && e.retryAfter <= 12 && waited + e.retryAfter <= 20) {
-          await sleep(e.retryAfter + 0.3);
-          waited += e.retryAfter + 0.3;
-          continue;
-        }
-        if (e.status === undefined && attempt < 3) continue;
-        break;
-      }
+    if (outcome.result) {
+      let titre = outcome.result.titre;
+      if (!titre) titre = await requestTitle(env, input.category, outcome.result.page, outcome.result.memoire).catch(() => "");
+      return json({ ...outcome.result, titre, ...meta });
     }
-    const quota = [413, 429].includes(lastError?.status);
-    const retryAfter = quota ? Math.ceil(lastError.retryAfter ?? 10) : 2;
-    let error = "Le moteur gratuit est temporairement indisponible. Aucune génération payante n'a été tentée.";
-    if (quota && retryAfter > 60) {
+
+    const retryAfter = outcome.quota ? outcome.retryAfter : 2;
+    let error = "Les moteurs gratuits sont temporairement indisponibles. Aucune génération payante n'a été tentée.";
+    if (outcome.quota && retryAfter > 60) {
       const minutes = Math.ceil(retryAfter / 60);
       const wait = minutes >= 60 ? `${Math.round(minutes / 60)} h` : `${minutes} min`;
-      error = `Le quota gratuit de l'IA est épuisé pour le moment${lastError.limit === "jour" ? " (limite quotidienne)" : ""}. ` +
+      error = `Les quotas gratuits de l'IA sont épuisés pour le moment${outcome.limit === "jour" ? " (limite quotidienne)" : ""}. ` +
         `Réessaie dans environ ${wait}. Ton histoire est conservée.`;
     }
-    return json({ error, retryAfter, limit: lastError?.limit || null, details: errors }, quota ? 429 : 503);
+    return json({ error, retryAfter, limit: outcome.limit || null, details: outcome.errors }, outcome.quota ? 429 : 503);
   }
 };

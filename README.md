@@ -15,7 +15,8 @@ Application web de romans interactifs « Je suis une légende ». Interface stat
 - Mode conte enfant avec tranches d'âge 3–5, 6–8 et 9–12 ans.
 - Bibliothèque locale : les histoires sont enregistrées dans le navigateur (localStorage).
 - Clés API conservées côté Worker, jamais envoyées au navigateur.
-- Moteur IA unique : Groq (plan Free).
+- Moteurs IA gratuits en cascade : Groq en priorité (gpt-oss-20b, puis gpt-oss-120b, Qwen…), puis Gemini niveau gratuit (familles Flash et Flash-Lite uniquement).
+- Chaque modèle a son propre quota : dès qu'un quota est atteint, le Worker bascule automatiquement sur le modèle gratuit suivant. Les listes de modèles se mettent à jour seules à partir des modèles disponibles sur chaque compte.
 - Liste blanche des modèles et arrêt si aucun fournisseur configuré/disponible.
 
 ## Important : gratuité et facturation
@@ -46,10 +47,12 @@ Prérequis : compte Cloudflare gratuit et Node.js installé sur ton ordinateur.
      ```bash
      npx wrangler deploy
      ```
-4. Ajoute la clé Groq comme secret :
+4. Ajoute les clés comme secrets (ou dans le tableau de bord : Settings → Variables and secrets → Add → Secret) :
    ```bash
    npx wrangler secret put GROQ_API_KEY
+   npx wrangler secret put GEMINI_API_KEY
    ```
+   La clé Gemini doit venir d'un projet Google AI Studio **sans facturation activée** (niveau gratuit uniquement).
 5. Dans `public/app.js`, remplace `WORKER_URL` par l'adresse `https://...workers.dev` obtenue après déploiement.
 6. Publie le dossier `public` avec Cloudflare Pages (Direct Upload ou dépôt Git).
 
