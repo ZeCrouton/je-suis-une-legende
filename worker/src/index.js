@@ -842,6 +842,163 @@ async function requestTitle(env, category, page, memo) {
   return raw.replace(/["«»*#]/g, "").replace(/[.!?:]+$/, "").trim().slice(0, 80);
 }
 
+// ---------------------------------------------------------------------------
+// ÉCRITURE EN DIRECT (flux)
+// Le texte de la page est envoyé au site au fur et à mesure qu'il s'écrit.
+// Le modèle répond en JSON : on extrait la liste "paragraphes" pendant qu'elle arrive.
+// En cas d'échec, le site repasse par la génération classique (avec ses attentes de quota).
+// ---------------------------------------------------------------------------
+function extractParagraphs(raw) {
+  const key = raw.indexOf('"paragraphes"');
+  if (key < 0) return "";
+  let i = raw.indexOf("[", key);
+  if (i < 0) return "";
+  i++;
+  const parts = [];
+  let current = null;
+  while (i < raw.length) {
+    const c = raw[i];
+    if (current === null) {
+      if (c === '"') current = "";
+      else if (c === "]") break;
+      i++;
+      continue;
+    }
+    if (c === "\\") {
+      const n = raw[i + 1];
+      if (n === undefined) break;
+      if (n === "u") {
+        const hex = raw.slice(i + 2, i + 6);
+        if (hex.length < 4) break;
+        current += String.fromCharCode(parseInt(hex, 16) || 32);
+        i += 6;
+        continue;
+      }
+      current += ({ n: "\n", t: " ", r: "", b: "", f: "" })[n] ?? n;
+      i += 2;
+      continue;
+    }
+    if (c === '"') { parts.push(current); current = null; i++; continue; }
+    current += c;
+    i++;
+  }
+  if (current !== null) parts.push(current);
+  return parts.join("\n\n");
+}
+
+async function* sseData(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try { yield JSON.parse(payload); } catch {}
+    }
+  }
+}
+
+// Ouvre le flux d'un moteur. Les erreurs HTTP (quota, etc.) sont levées avant tout texte.
+async function openStream(env, engine, prompts, withThinkingConfig = true) {
+  if (engine.provider === "Groq") {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: engine.model,
+        messages: [{ role: "system", content: prompts.system }, { role: "user", content: prompts.user }],
+        temperature: 0.9, max_tokens: 2400, ...groqParams(engine.model),
+        response_format: { type: "json_object" }, stream: true
+      })
+    });
+    if (!response.ok) throw await httpError("Groq", response);
+    return (async function* () {
+      for await (const d of sseData(response)) yield d.choices?.[0]?.delta?.content || "";
+    })();
+  }
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 2200 };
+  if (withThinkingConfig) {
+    generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${engine.model}:streamGenerateContent?alt=sse&key=${env.GEMINI_API_KEY}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: prompts.system }] },
+      contents: [{ role: "user", parts: [{ text: prompts.user }] }],
+      generationConfig
+    })
+  });
+  if (!response.ok) {
+    if (response.status === 400 && withThinkingConfig) return openStream(env, engine, prompts, false);
+    throw await httpError("Gemini", response);
+  }
+  return (async function* () {
+    for await (const d of sseData(response)) {
+      yield (d.candidates?.[0]?.content?.parts || []).filter(p => !p.thought).map(p => p.text || "").join("");
+    }
+  })();
+}
+
+function streamStory(env, input, plan, meta) {
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const send = obj => writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+
+  const run = async () => {
+    const system = buildSystemPrompt(input, plan);
+    const user = buildUserPrompt(input, plan);
+    const chain = await engineChain(env);
+    const errors = [];
+    for (const engine of chain) {
+      const key = `${engine.provider}:${engine.model}`;
+      if (isExhausted(key)) continue;
+      let deltas;
+      try {
+        deltas = await openStream(env, engine, { system, user });
+      } catch (e) {
+        errors.push(`${key}: ${e.message}`);
+        if (e.status === 429 || e.status === 413) exhausted.set(key, Date.now() + (e.retryAfter ?? 60) * 1000);
+        continue;
+      }
+      let raw = "", sent = 0;
+      try {
+        for await (const delta of deltas) {
+          if (!delta) continue;
+          raw += delta;
+          const text = extractParagraphs(raw);
+          if (text.length > sent) { await send({ t: text.slice(sent) }); sent = text.length; }
+        }
+        const result = parseOutput(raw, plan.isEnd);
+        const { plan: hiddenPlan, ...visible } = result;
+        let titre = visible.titre;
+        if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
+        await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}` });
+        return;
+      } catch (e) {
+        errors.push(`${key}: ${e.message}`);
+        if (sent) await send({ reset: true });
+      }
+    }
+    await send({ error: "Génération en direct impossible.", details: errors });
+  };
+
+  run().catch(e => send({ error: String(e.message || e) }).catch(() => {})).finally(() => writer.close().catch(() => {}));
+  return new Response(readable, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" }
+  });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -861,6 +1018,7 @@ export default {
     if (input.engine === "list") return json({ chain: (await engineChain(env)).map(e => `${e.provider}:${e.model}`) });
     const debug = input.debug === "compare";
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
+    if (input.stream === true && !input.engine && !debug) return streamStory(env, input, plan, meta);
     const outcome = await generateWithFallback(env, input, plan);
 
     if (outcome.result) {

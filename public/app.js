@@ -120,6 +120,29 @@ async function generate(choiceIndex = null) {
 
   let lastError = null;
 
+  const applyResult = data => {
+    currentStory.pages.push({
+      page: cleanText(data.page),
+      choices: data.choices.map(cleanText),
+      directions: Array.isArray(data.directions) ? data.directions : [],
+      choice: selectedChoice || "Début"
+    });
+    currentStory.memo = data.memoire || currentStory.memo || "";
+    currentStory.title = data.titre || currentStory.title || "";
+    currentStory.totalPages = data.totalPages || currentStory.totalPages;
+    currentStory.finished = data.fin === true;
+    currentStory.updatedAt = new Date().toISOString();
+    generating = false;
+    restoreButton();
+    $("startBtn").disabled = false;
+    renderStory();
+    $("providerNote").textContent = "Histoire enregistrée sur cet appareil";
+  };
+
+  // D'abord l'écriture en direct, avec la plume ; en cas de souci, génération classique.
+  const live = await streamPage(body);
+  if (live) { applyResult(live); return; }
+
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
       $("providerNote").textContent =
@@ -154,26 +177,7 @@ async function generate(choiceIndex = null) {
         throw new Error("La réponse reçue est incomplète. Réessaie.");
       }
 
-      currentStory.pages.push({
-        page: cleanText(data.page),
-        choices: data.choices.map(cleanText),
-        directions: Array.isArray(data.directions) ? data.directions : [],
-        choice: selectedChoice || "Début"
-      });
-
-      currentStory.memo = data.memoire || currentStory.memo || "";
-      currentStory.title = data.titre || currentStory.title || "";
-      currentStory.totalPages = data.totalPages || currentStory.totalPages;
-      currentStory.finished = data.fin === true;
-      currentStory.updatedAt = new Date().toISOString();
-
-      generating = false;
-      restoreButton();
-      $("startBtn").disabled = false;
-      renderStory();
-
-      $("providerNote").textContent = "Histoire enregistrée sur cet appareil";
-
+      applyResult(data);
       return;
 
     } catch (error) {
@@ -214,6 +218,107 @@ async function generate(choiceIndex = null) {
   restoreButton();
   buttons.forEach(button => button.disabled = false);
   updateNav();
+}
+
+// ÉCRITURE EN DIRECT : la page apparaît mot après mot, une petite plume au bout de la ligne.
+// Renvoie les données de la page terminée, ou null (le site repasse alors par la génération classique).
+async function streamPage(body){
+  if (!window.ReadableStream || !window.TextDecoder) return null;
+  const pageNo = body.pageNumber;
+  const fromView = currentView();
+  const snapshot = {
+    title: $("storyTitle").textContent, text: $("storyText").innerHTML,
+    count: $("pageCount").textContent, footer: $("storyFooterText").textContent, tag: $("genreTag").textContent
+  };
+  const wrap = document.querySelector(".choices-wrap"), nav = document.querySelector(".review-row");
+  let started = false, target = "", shown = 0, timer = null, finished = null;
+
+  const draw = () => {
+    const visible = target.slice(0, shown);
+    const parts = visible.split(/\n+/).map(p => p.trim()).filter(Boolean);
+    if (!parts.length) parts.push("");
+    $("storyText").innerHTML = parts.map((p, i) =>
+      `<p>${escapeHtml(p)}${i === parts.length - 1 ? '<span class="quill" aria-hidden="true">🪶</span>' : ""}</p>`).join("");
+  };
+  const start = () => {
+    started = true;
+    $("genreTag").textContent = currentStory.category;
+    $("pageCount").textContent = `Page ${pageNo}${currentStory.totalPages ? ` sur ${currentStory.totalPages}` : ""}`;
+    if (pageNo === 1) $("storyTitle").textContent = "Une nouvelle aventure";
+    $("storyFooterText").textContent = "L'auteur écrit…";
+    wrap.classList.add("hidden"); nav.classList.add("hidden");
+    $("providerNote").textContent = "";
+    draw();
+    if (fromView !== "readerView") show("readerView");
+    else $("storyText").scrollIntoView({ behavior: "smooth", block: "start" });
+    // Rythme régulier, mot par mot ; accélère si le texte reçu a beaucoup d'avance.
+    timer = setInterval(() => {
+      if (shown >= target.length) { if (finished) finish(); return; }
+      const backlog = target.slice(shown).split(/\s+/).length;
+      let steps = Math.max(1, Math.ceil(backlog / 12));
+      while (steps-- > 0 && shown < target.length) {
+        const next = target.slice(shown).search(/\S\s/);
+        shown = next < 0 ? target.length : shown + next + 2;
+      }
+      draw();
+    }, 45);
+  };
+  let resolveDone;
+  const done = new Promise(r => { resolveDone = r; });
+  const finish = () => { clearInterval(timer); timer = null; resolveDone(finished); };
+  const undo = () => {
+    if (timer) clearInterval(timer);
+    if (!started) return;
+    $("storyTitle").textContent = snapshot.title; $("storyText").innerHTML = snapshot.text;
+    $("pageCount").textContent = snapshot.count; $("storyFooterText").textContent = snapshot.footer; $("genreTag").textContent = snapshot.tag;
+    wrap.classList.remove("hidden"); nav.classList.remove("hidden");
+    if (fromView !== "readerView") show(fromView);
+  };
+
+  $("providerNote").textContent = "Génération de votre histoire en cours…";
+  const controller = new AbortController();
+  const watchdog = setTimeout(() => controller.abort(), 90000);
+  try {
+    const response = await fetch(`${WORKER_URL}/api/story`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, stream: true }), signal: controller.signal
+    });
+    if (!response.ok || !String(response.headers.get("content-type")).includes("event-stream") || !response.body) throw new Error("flux indisponible");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done: end, value } = await reader.read();
+      if (end) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n\n")) >= 0) {
+        const line = buffer.slice(0, cut).trim(); buffer = buffer.slice(cut + 2);
+        if (!line.startsWith("data:")) continue;
+        const ev = JSON.parse(line.slice(5));
+        if (ev.t) { target += ev.t; if (!started) start(); }
+        else if (ev.reset) { target = ""; shown = 0; if (started) draw(); }
+        else if (ev.done) {
+          if (!ev.page || !Array.isArray(ev.choices)) throw new Error("réponse incomplète");
+          finished = ev;
+        }
+        else if (ev.error) throw new Error(ev.error);
+      }
+    }
+    if (!finished) throw new Error("flux interrompu");
+    clearTimeout(watchdog);
+    if (!started) return finished;
+    // Le texte final (nettoyé) remplace le texte en direct une fois la plume arrivée au bout.
+    target = cleanText(finished.page);
+    if (shown > target.length) shown = target.length;
+    const result = await done;
+    wrap.classList.remove("hidden"); nav.classList.remove("hidden");
+    return result;
+  } catch {
+    clearTimeout(watchdog);
+    undo();
+    return null;
+  }
 }
 
 // Lecture à voix haute (API Web Speech, intégrée au navigateur, gratuite).

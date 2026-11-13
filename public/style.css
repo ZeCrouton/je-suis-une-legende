@@ -54,3 +54,7 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .full-choice{margin:18px 0 4px;padding:10px 14px;border-left:2px solid var(--gold);background:rgba(255,255,255,.04);color:var(--cream);font-style:italic}
 .full-actions{display:flex;justify-content:center;gap:10px;margin:14px 0 6px;flex-wrap:wrap}
 .library-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.quill{display:inline-block;margin-left:4px;font-size:.95em;animation:quill-write .6s ease-in-out infinite alternate;transform-origin:20% 90%}
+@keyframes quill-write{from{transform:rotate(-8deg) translateY(0)}to{transform:rotate(6deg) translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.quill{animation:none}}
