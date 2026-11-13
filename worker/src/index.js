@@ -1168,7 +1168,9 @@ async function openStream(env, engine, prompts, withThinkingConfig = true, signa
       body: JSON.stringify({
         model: engine.model,
         messages: [{ role: "system", content: prompts.system }, { role: "user", content: prompts.user }],
-        temperature: 0.8, max_tokens: 3000, ...groqParams(engine.model), stream: true
+        temperature: 0.8, max_tokens: 3000, ...groqParams(engine.model), stream: true,
+        // Qwen ne suit le format du flux qu'en mode JSON strict (comme en génération classique).
+        ...(/^qwen\//.test(engine.model) ? { response_format: { type: "json_object" } } : {})
       })
     });
     if (!response.ok) throw await httpError("Groq", response);
