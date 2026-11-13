@@ -1,6 +1,3 @@
-// Numéro de version du serveur (à augmenter à chaque mise à jour du Worker, en même temps que celui du site).
-const VERSION = "1.1";
-
 const CATEGORIES = new Set([
   "Fantasy", "Science-fiction", "Thriller", "Horreur", "Romance",
   "Aventure", "Policier", "Mystère", "Conte pour enfant", "Comédie"
@@ -1142,7 +1139,7 @@ export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
     const url = new URL(request.url);
-    if (url.pathname === "/health") return json({ ok: true, version: VERSION, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
+    if (url.pathname === "/health") return json({ ok: true, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
     if (url.pathname !== "/api/story" || request.method !== "POST") return json({ error: "Not found" }, 404);
     if (env.FREE_ONLY !== "true") return json({ error: "Génération bloquée : le mode gratuit strict n'est pas activé." }, 503);
     if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: "Aucune clé IA n'est configurée." }, 503);

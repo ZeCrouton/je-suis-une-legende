@@ -1,5 +1,4 @@
-// Numéro de version du site (à augmenter à chaque mise à jour, en même temps que VERSION dans worker/src/index.js
-// et le paramètre ?v= dans index.html).
+// Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
 const APP_VERSION = "1.1";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
@@ -611,12 +610,7 @@ $("aboutBtn").addEventListener("click", () => setAbout($("aboutBtn").getAttribut
 $("aboutClose").addEventListener("click", () => { setAbout(false); $("aboutBtn").focus(); });
 $("resumeBtn").addEventListener("click", () => renderStory(displayedIndex ?? undefined));
 placeNotes("homeView");
-// Pied de page : version du site, puis celle du serveur dès qu'il répond (pour vérifier qu'une mise à jour est bien en ligne).
-(function showVersions(){
-  const line = $("versionLine");
-  const render = server => { line.textContent = `Site v${APP_VERSION} · Serveur ${server}`; };
-  render("…");
-  fetch(`${WORKER_URL}/health`).then(r => r.json()).then(d => render(d.version ? "v" + d.version : "?")).catch(() => render("injoignable"));
-})();
+// Pied de page : numéro de version du site (pour vérifier qu'une mise à jour est bien en ligne).
+$("versionLine").textContent = `v${APP_VERSION}`;
 loadHeroPrefs();
 renderCategories(); updateCount(); restoreState();
