@@ -883,7 +883,7 @@ async function callGroq(env, model, prompts, isEnd) {
   return { ...parseOutput(data.choices?.[0]?.message?.content || "", isEnd), usage: data.usage || null };
 }
 
-async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
+async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true, signal) {
   const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3500 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
@@ -892,6 +892,7 @@ async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true)
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
   const response = await fetch(url, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: prompts.system }] },
@@ -901,7 +902,7 @@ async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true)
   });
   if (!response.ok) {
     // Si ce modèle refuse le réglage de réflexion, on réessaie une fois sans.
-    if (response.status === 400 && withThinkingConfig) return callGemini(env, model, prompts, isEnd, false);
+    if (response.status === 400 && withThinkingConfig) return callGemini(env, model, prompts, isEnd, false, signal);
     throw await httpError("Gemini", response);
   }
   const data = await response.json();
@@ -931,6 +932,9 @@ function parseDuration(text) {
 
 const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 1000));
 
+// Gemini a ce délai pour commencer à répondre. Au-delà, on passe à Qwen, puis à Groq (dernier recours).
+const GEMINI_WAIT_MS = 8000;
+
 // Liste ordonnée des moteurs à essayer pour cette requête.
 async function engineChain(env) {
   const chain = [];
@@ -945,10 +949,10 @@ async function engineChain(env) {
   return chain;
 }
 
-function callEngine(env, engine, prompts, isEnd) {
+function callEngine(env, engine, prompts, isEnd, signal) {
   return engine.provider === "Groq"
     ? callGroq(env, engine.model, prompts, isEnd)
-    : callGemini(env, engine.model, prompts, isEnd);
+    : callGemini(env, engine.model, prompts, isEnd, true, signal);
 }
 
 function shortModel(model) {
@@ -965,18 +969,32 @@ async function generateWithFallback(env, input, plan) {
   const errors = [];
   const quotaWaits = [];
   let lastLimit = null;
+  let geminiSlow = false;   // Gemini n'a pas répondu dans le délai : on passe directement à Groq
 
   const tryEngine = async engine => {
     const key = `${engine.provider}:${engine.model}`;
     let maxPages = 2, correction = "", kept = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) + correction }, plan.isEnd);
+        const ac = new AbortController();
+        const timer = engine.provider === "Gemini" ? setTimeout(() => ac.abort(), GEMINI_WAIT_MS) : null;
+        let result;
+        try {
+          result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) + correction }, plan.isEnd, ac.signal);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
         // Incohérence détectée : une seule nouvelle écriture, avec la correction demandée ; sinon on garde la page telle quelle.
         const issue = plan.isEnd || attempt > 1 || correction ? "" : coherenceIssue(result, input);
         if (issue) { correction = `\n\nCORRECTION OBLIGATOIRE : ta version précédente avait un défaut de cohérence : ${issue}`; attempt--; kept = result; errors.push(`${engine.provider} ${engine.model}: ${issue}`); continue; }
         return { ...result, provider: `${engine.provider} · ${shortModel(engine.model)}` };
       } catch (e) {
+        if (e.name === "AbortError") {
+          // Délai dépassé : Gemini est trop lent, on ne retente pas.
+          geminiSlow = true;
+          errors.push(`${engine.provider} ${engine.model}: pas de réponse dans le délai`);
+          return kept ? { ...kept, provider: `${engine.provider} · ${shortModel(engine.model)}` } : null;
+        }
         errors.push(`${engine.provider} ${engine.model}: ${e.message}${e.apiMessage ? ` (${e.apiMessage})` : ""}`);
         // Visible dans Workers Logs : pourquoi un modèle a été écarté.
         console.log(`[engine] ${key} · ${e.status ?? "sans statut"} · ${e.apiMessage || e.message}`);
@@ -1004,6 +1022,7 @@ async function generateWithFallback(env, input, plan) {
   };
 
   for (const engine of chain) {
+    if (engine.provider === "Gemini" && geminiSlow) continue;
     if (isExhausted(`${engine.provider}:${engine.model}`)) {
       errors.push(`${engine.provider} ${engine.model}: quota en pause`);
       continue;
@@ -1141,7 +1160,7 @@ async function* sseData(response) {
 }
 
 // Ouvre le flux d'un moteur. Les erreurs HTTP (quota, etc.) sont levées avant tout texte.
-async function openStream(env, engine, prompts, withThinkingConfig = true) {
+async function openStream(env, engine, prompts, withThinkingConfig = true, signal) {
   if (engine.provider === "Groq") {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -1164,6 +1183,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${engine.model}:streamGenerateContent?alt=sse&key=${env.GEMINI_API_KEY}`;
   const response = await fetch(url, {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: prompts.system }] },
@@ -1172,7 +1192,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
     })
   });
   if (!response.ok) {
-    if (response.status === 400 && withThinkingConfig) return openStream(env, engine, prompts, false);
+    if (response.status === 400 && withThinkingConfig) return openStream(env, engine, prompts, false, signal);
     throw await httpError("Gemini", response);
   }
   return (async function* () {
@@ -1194,14 +1214,22 @@ function streamStory(env, input, plan, meta) {
     const t0 = Date.now();
     const chain = await engineChain(env);
     const errors = [];
+    let geminiSlow = false;   // Gemini n'a pas commencé dans le délai : on passe à Qwen, puis Groq
     for (const engine of chain) {
       const key = `${engine.provider}:${engine.model}`;
       if (isExhausted(key)) continue;
+      if (engine.provider === "Gemini" && geminiSlow) continue;
+      // Gemini n'a que GEMINI_WAIT_MS pour envoyer son premier texte ; sinon on l'abandonne.
+      const ac = new AbortController();
+      let timer = engine.provider === "Gemini" ? setTimeout(() => ac.abort(), GEMINI_WAIT_MS) : null;
+      const stopTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
       let deltas;
       try {
-        deltas = await openStream(env, engine, { system, user });
+        deltas = await openStream(env, engine, { system, user }, true, ac.signal);
       } catch (e) {
-        errors.push(`${key}: ${e.message}`);
+        stopTimer();
+        if (e.name === "AbortError") geminiSlow = true;
+        errors.push(`${key}: ${e.name === "AbortError" ? "pas de réponse dans le délai" : e.message}`);
         if (e.status === 429 || e.status === 413) exhausted.set(key, Date.now() + (e.retryAfter ?? 60) * 1000);
         continue;
       }
@@ -1209,6 +1237,7 @@ function streamStory(env, input, plan, meta) {
       try {
         for await (const delta of deltas) {
           if (!delta) continue;
+          stopTimer();
           raw += delta;
           const text = streamedText(raw);
           if (text.length > sent) { if (!sent) first = Date.now() - t0; await send({ t: text.slice(sent) }); sent = text.length; }
@@ -1220,6 +1249,8 @@ function streamStory(env, input, plan, meta) {
         await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}`, timing: { firstText: first, total: Date.now() - t0 } });
         return;
       } catch (e) {
+        stopTimer();
+        if (e.name === "AbortError") geminiSlow = true;
         errors.push(`${key}: ${e.message}`);
         if (sent) await send({ reset: true });
       }
