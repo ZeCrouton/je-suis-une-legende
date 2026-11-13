@@ -808,8 +808,8 @@ function geminiRank(name) {
   const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
   const lite = /lite/.test(name) ? 1 : 0;
   const preview = /preview|latest/.test(name) ? 1 : 0;
-  // Le plus rapide d'abord : Flash-Lite (la version la plus récente en tête), puis 2.5 Flash, puis le reste.
-  const fast = lite ? 0 : /^gemini-2\.5-flash$/.test(name) ? 1 : 2;
+  // Qualité d'abord : Flash complet (la version la plus récente en tête), puis les Flash-Lite en secours.
+  const fast = lite ? 1 : 0;
   return [fast, -version, lite, preview, name.length];
 }
 
