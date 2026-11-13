@@ -335,7 +335,7 @@ function recipeInstruction(recipe, plan) {
 //   puis, tout à la fin, les dernières lignes lues : c'est ce que le modèle voit en dernier
 //   avant d'écrire, ce qui l'aide à enchaîner au lieu de recommencer un nouveau chapitre.
 // ---------------------------------------------------------------------------
-function buildSystemPrompt(input, plan) {
+function buildSystemPrompt(input, plan, streaming = false) {
   const { child, isEnd } = plan;
   const g = GENRES[input.category];
   const age = child ? (AGES.includes(input.age) ? input.age : "6–8 ans") : null;
@@ -413,10 +413,21 @@ SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulem
 TITRE
 Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent avec l'histoire (il peut évoluer ; à la dernière page, il reflète la conclusion).
 
-FORMAT DE RÉPONSE
+${streaming ? streamFormat(isEnd) : `FORMAT DE RÉPONSE
 Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
 Commence par "plan" : 15 mots maximum, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
-{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
+{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`}`;
+}
+
+// Format pour l'écriture en direct : le texte de la page d'abord (il s'affiche pendant qu'il s'écrit),
+// puis une ligne repère, puis le reste en JSON.
+const STREAM_MARK = "===SUITE===";
+function streamFormat(isEnd) {
+  return `FORMAT DE RÉPONSE (impératif)
+1. Écris d'abord directement le texte de la page : paragraphes séparés par une ligne vide, sans titre, sans guillemets autour, sans aucune balise ni commentaire avant.
+2. Puis une ligne contenant uniquement : ${STREAM_MARK}
+3. Puis un objet JSON valide, sans texte autour :
+{"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
 }
 
 function buildUserPrompt(input, plan, maxPages = 2) {
@@ -848,6 +859,28 @@ async function requestTitle(env, category, page, memo) {
 // Le modèle répond en JSON : on extrait la liste "paragraphes" pendant qu'elle arrive.
 // En cas d'échec, le site repasse par la génération classique (avec ses attentes de quota).
 // ---------------------------------------------------------------------------
+// Texte de la page déjà écrit (format direct : tout ce qui précède la ligne repère).
+function streamedText(raw) {
+  const head = raw.trimStart();
+  if (head.startsWith("{") || head.startsWith("```")) return extractParagraphs(raw);
+  const mark = raw.indexOf("===");
+  // On retient les derniers caractères tant qu'ils pourraient être le début du repère.
+  const text = mark >= 0 ? raw.slice(0, mark) : raw.replace(/=+$/, "");
+  return text.replace(/^\s+/, "");
+}
+
+function parseStreamOutput(raw, isEnd) {
+  const mark = raw.indexOf("===");
+  if (mark < 0) return parseOutput(raw, isEnd);
+  const text = raw.slice(0, mark);
+  const rest = raw.slice(mark).replace(/^=+[A-ZÉ]*=*/, "");
+  const match = rest.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("Partie JSON absente.");
+  const value = JSON.parse(match[0]);
+  value.paragraphes = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  return parseOutput(JSON.stringify(value), isEnd);
+}
+
 function extractParagraphs(raw) {
   const key = raw.indexOf('"paragraphes"');
   if (key < 0) return "";
@@ -915,8 +948,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
       body: JSON.stringify({
         model: engine.model,
         messages: [{ role: "system", content: prompts.system }, { role: "user", content: prompts.user }],
-        temperature: 0.9, max_tokens: 2400, ...groqParams(engine.model),
-        response_format: { type: "json_object" }, stream: true
+        temperature: 0.9, max_tokens: 2400, ...groqParams(engine.model), stream: true
       })
     });
     if (!response.ok) throw await httpError("Groq", response);
@@ -924,7 +956,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
       for await (const d of sseData(response)) yield d.choices?.[0]?.delta?.content || "";
     })();
   }
-  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 2200 };
+  const generationConfig = { temperature: 0.9, maxOutputTokens: 2200 };
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
   }
@@ -956,8 +988,9 @@ function streamStory(env, input, plan, meta) {
   const send = obj => writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
   const run = async () => {
-    const system = buildSystemPrompt(input, plan);
+    const system = buildSystemPrompt(input, plan, true);
     const user = buildUserPrompt(input, plan);
+    const t0 = Date.now();
     const chain = await engineChain(env);
     const errors = [];
     for (const engine of chain) {
@@ -971,19 +1004,19 @@ function streamStory(env, input, plan, meta) {
         if (e.status === 429 || e.status === 413) exhausted.set(key, Date.now() + (e.retryAfter ?? 60) * 1000);
         continue;
       }
-      let raw = "", sent = 0;
+      let raw = "", sent = 0, first = 0;
       try {
         for await (const delta of deltas) {
           if (!delta) continue;
           raw += delta;
-          const text = extractParagraphs(raw);
-          if (text.length > sent) { await send({ t: text.slice(sent) }); sent = text.length; }
+          const text = streamedText(raw);
+          if (text.length > sent) { if (!sent) first = Date.now() - t0; await send({ t: text.slice(sent) }); sent = text.length; }
         }
-        const result = parseOutput(raw, plan.isEnd);
+        const result = parseStreamOutput(raw, plan.isEnd);
         const { plan: hiddenPlan, ...visible } = result;
         let titre = visible.titre;
         if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
-        await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}` });
+        await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}`, timing: { firstText: first, total: Date.now() - t0 } });
         return;
       } catch (e) {
         errors.push(`${key}: ${e.message}`);

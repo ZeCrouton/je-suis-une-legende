@@ -255,13 +255,14 @@ async function streamPage(body){
     timer = setInterval(() => {
       if (shown >= target.length) { if (finished) finish(); return; }
       const backlog = target.slice(shown).split(/\s+/).length;
-      let steps = Math.max(1, Math.ceil(backlog / 12));
+      // Environ 18 mots par seconde ; n'accélère que si beaucoup de texte attend.
+      let steps = backlog > 80 ? Math.ceil(backlog / 50) : 1;
       while (steps-- > 0 && shown < target.length) {
         const next = target.slice(shown).search(/\S\s/);
         shown = next < 0 ? target.length : shown + next + 2;
       }
       draw();
-    }, 45);
+    }, 55);
   };
   let resolveDone;
   const done = new Promise(r => { resolveDone = r; });
@@ -301,6 +302,7 @@ async function streamPage(body){
         else if (ev.done) {
           if (!ev.page || !Array.isArray(ev.choices)) throw new Error("réponse incomplète");
           finished = ev;
+          if (ev.timing) console.info("Plume :", ev.provider, ev.timing);
         }
         else if (ev.error) throw new Error(ev.error);
       }
