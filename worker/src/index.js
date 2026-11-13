@@ -1248,7 +1248,7 @@ function streamStory(env, input, plan, meta) {
         const { plan: hiddenPlan, ...visible } = result;
         let titre = visible.titre;
         if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
-        await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}`, timing: { firstText: first, total: Date.now() - t0 } });
+        await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}`, timing: { firstText: first, total: Date.now() - t0 }, skipped: errors });
         return;
       } catch (e) {
         stopTimer();
