@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "2.3";
+const APP_VERSION = "2.4";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -616,6 +616,7 @@ $("startBtn").addEventListener("click",async()=>{
     return;
   }
   $("errorBox").classList.add("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
   const previousStory = currentStory;
   const previousIndex = displayedIndex;
   currentStory = {
