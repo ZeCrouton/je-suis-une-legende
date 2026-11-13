@@ -160,7 +160,7 @@ const CHILD_AGE_GUIDES = {
 // Le rôle est imposé par le code, pour que la fin arrive toujours et que la tension monte.
 function phaseInstruction(pageNumber, total, g) {
   if (pageNumber === 1) {
-    return `OUVERTURE. Écris d'abord la bible, puis la page 1 : lance l'histoire avec ${g.moteur}. Présente le héros en situation, laisse entrevoir sa blessure intime par un détail, ` +
+    return `OUVERTURE. Écris d'abord la bible, puis la page 1 : lance l'histoire avec ${g.moteur}. Présente le héros en situation, avec un geste ou un objet qui intrigue sans rien expliquer, ` +
       `sème un détail anodin qui comptera plus tard, et termine sur un moment de décision.`;
   }
   if (pageNumber >= total) {
@@ -511,7 +511,9 @@ CONTINUITÉ ET PROGRESSION
 - Les révélations viennent de la TRAME et des détails semés plus tôt, jamais d'une invention de dernière minute.
 
 ÉMOTION
-- Chaque page contient au moins un moment intérieur ou relationnel : un souvenir lié à la blessure du héros, un regard, un échange vrai avec un autre personnage, un doute. Montre-le par des gestes et des paroles, pas par des étiquettes (« il était triste »).
+- Chaque page contient au moins un moment intérieur ou relationnel : un regard, un échange vrai avec un autre personnage, un doute, un geste qui trahit quelque chose.
+- La blessure du héros n'est JAMAIS nommée ni expliquée avant la page du tournant (pas de « souvenir de l'accident qui a emporté sa sœur ») : on la devine par des gestes, des silences, un objet, une phrase qui reste en travers. Le lecteur la comprend peu à peu.
+- Relis chaque phrase : un objet, un personnage ou un détail ne peut pas être à deux endroits à la fois. Montre-le par des gestes et des paroles, pas par des étiquettes (« il était triste »).
 - Les autres personnages ont leurs propres désirs : ils agissent, aident, mentent ou souffrent pour leurs raisons, pas seulement pour servir l'intrigue.
 
 ÉCRITURE
@@ -806,8 +808,8 @@ function geminiRank(name) {
   const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
   const lite = /lite/.test(name) ? 1 : 0;
   const preview = /preview|latest/.test(name) ? 1 : 0;
-  // gemini-2.5-flash passe en tête : sans réflexion préalable, il répond bien plus vite que la série 3.
-  const fast = /^gemini-2\.5-flash$/.test(name) ? 0 : 1;
+  // Le plus rapide d'abord : 2.5 Flash-Lite (sans réflexion), puis 2.5 Flash, puis la série 3.
+  const fast = /^gemini-2\.5-flash-lite$/.test(name) ? 0 : /^gemini-2\.5-flash$/.test(name) ? 1 : 2;
   return [fast, -version, lite, preview, name.length];
 }
 
@@ -932,9 +934,9 @@ const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 10
 // Liste ordonnée des moteurs à essayer pour cette requête.
 async function engineChain(env) {
   const chain = [];
-  // Groq en premier (plus rapide), Gemini en secours.
-  if (env.GROQ_API_KEY) (await groqModels(env)).forEach(model => chain.push({ provider: "Groq", model }));
+  // Gemini en premier (le modèle le plus rapide), Groq en secours.
   if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
+  if (env.GROQ_API_KEY) (await groqModels(env)).forEach(model => chain.push({ provider: "Groq", model }));
   return chain;
 }
 
