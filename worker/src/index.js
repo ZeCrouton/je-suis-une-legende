@@ -181,6 +181,154 @@ function phaseInstruction(pageNumber, total, g) {
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ---------------------------------------------------------------------------
+// RECETTE DE PAGE
+// Les modèles ne varient pas d'eux-mêmes : à chaque page, ils retombent sur le même schéma
+// (« un secret, un twist fort, deux options d'un même geste »). C'est donc le CODE qui tire,
+// de façon déterministe à partir de l'identifiant de l'histoire, une recette par page :
+// intensité du rebondissement, source du dilemme, et deux familles d'action différentes.
+// Le rythme est mélangé selon des contraintes (pages calmes, un seul gros tournant, etc.).
+// ---------------------------------------------------------------------------
+function seededRandom(text) {
+  let h = 1779033703 ^ text.length;
+  for (let i = 0; i < text.length; i++) {
+    h = Math.imul(h ^ text.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const TWIST_LEVELS = {
+  0: "PAGE CALME : aucun rebondissement. Approfondis un personnage, une relation, une atmosphère, un lieu ; laisse respirer. La tension reste sourde. Le dilemme de fin de page naît d'une situation humaine, pas d'un choc.",
+  1: "PETIT IMPRÉVU : un détail qui cloche, une phrase qui sonne faux, un objet mal placé, un visiteur ou une rencontre inattendue. Rien de spectaculaire, mais le lecteur sent que quelque chose bouge.",
+  2: "RETOURNEMENT MOYEN : une information, une alliance ou un plan bascule. Une certitude du héros se fissure, sans tout renverser.",
+  3: "COUP DE THÉÂTRE : une révélation ou un événement qui change le sens de ce qui précède. Il doit être préparé par des détails déjà semés et logique après coup."
+};
+
+const DILEMMA_SOURCES = {
+  conflit: "un conflit entre deux personnages (désaccord, jalousie, loyautés opposées) dans lequel le héros est pris",
+  decor: "un carrefour dans le décor (deux voies, un passage, un obstacle naturel ou une configuration des lieux qui impose une direction)",
+  valeur: "un conflit de valeurs (loyauté contre vérité, justice contre pitié, liberté contre sécurité)",
+  desir: "la peur contre le désir : ce que le héros veut vraiment s'oppose à ce qu'il redoute",
+  temps: "une échéance : ce qui doit être fait avant un moment précis, au détriment d'autre chose",
+  objet: "un objet ou un avantage qu'il faudrait sacrifier, donner ou perdre pour obtenir autre chose",
+  secret: "un secret que le héros détient ou découvre et qu'il peut taire ou utiliser",
+  visiteur: "l'arrivée inattendue de quelqu'un ou de quelque chose qui oblige à réagir tout de suite",
+  passe: "la conséquence d'un choix passé qui revient frapper le héros (précise lequel)",
+  regle: "une règle du monde ou de l'histoire (magie, loi, rituel, interdit) qui impose un prix à toute action"
+};
+
+const ACTION_FAMILIES = {
+  agir: "agir de front : affronter, forcer, poursuivre, bloquer, saisir",
+  parler: "parler : négocier, mentir, avouer, convaincre, menacer, appeler à l'aide",
+  enquêter: "chercher et comprendre : fouiller, suivre, interroger, déchiffrer, comparer des indices",
+  outil: "utiliser un objet, un savoir-faire, un pouvoir ou un lieu de façon ingénieuse",
+  allié: "se tourner vers quelqu'un : demander de l'aide, protéger, confier, rompre ou nouer une alliance",
+  risque: "tenter l'inconnu : s'aventurer, franchir, plonger, parier sur l'instinct",
+  sacrifice: "renoncer ou payer : donner, perdre, laisser derrière soi, assumer un coût",
+  piège: "ruser : détourner l'attention, tendre un piège, simuler, se faire passer pour un autre",
+  révéler: "dévoiler ou rendre public : exposer un secret, confronter quelqu'un, dire la vérité à voix haute"
+};
+
+function pickDistinct(rand, list, count, avoid) {
+  const pool = list.filter(x => !avoid.includes(x));
+  const source = pool.length >= count ? pool : list;
+  const out = [];
+  while (out.length < count && source.length) {
+    const candidate = source[Math.floor(rand() * source.length)];
+    if (!out.includes(candidate)) out.push(candidate);
+  }
+  return out;
+}
+
+// Intensités des rebondissements pour toute l'histoire (index 0 = page 1). -1 = pas de rebondissement (dénouement).
+function twistRhythm(rand, total, child) {
+  const last = total - 1;
+  const fixed = [];
+  fixed[0] = 1;
+  fixed[last] = -1;
+  fixed[last - 1] = 2;       // climax
+  fixed[last - 2] = 3;       // tournant
+  const middle = [];
+  for (let i = 1; i <= last - 3; i++) middle.push(i);
+  const maxStrong = child ? 1 : 2;
+  const calmTarget = child ? 1 : (rand() < 0.5 ? 1 : 2);
+
+  const valid = levels => {
+    const mid = middle.map(i => levels[i]);
+    const calm = mid.filter(v => v === 0).length;
+    const strong = mid.filter(v => v === 3).length;
+    if (calm < 1 || calm > calmTarget) return false;
+    if (strong > maxStrong) return false;
+    if (levels[last - 3] === 3 || levels[last - 3] === undefined) return false;
+    for (let i = 1; i < levels.length; i++) if (levels[i] === 3 && levels[i - 1] === 3) return false;
+    // Il faut une vraie variété : au moins trois intensités différentes dans l'histoire.
+    return new Set(levels.filter(v => v >= 0)).size >= 3;
+  };
+
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const levels = [...fixed];
+    for (const i of middle) {
+      const r = rand();
+      levels[i] = r < 0.25 ? 0 : r < 0.55 ? 1 : r < 0.85 ? 2 : 3;
+    }
+    if (valid(levels)) return levels;
+  }
+  // Solution de repli sûre.
+  const levels = [...fixed];
+  const pattern = [2, 0, 1, 3, 1, 2];
+  middle.forEach((i, k) => { levels[i] = pattern[k % pattern.length]; });
+  if (levels[last - 3] === 3) levels[last - 3] = 2;
+  return levels;
+}
+
+// Recette complète de l'histoire : une entrée par page (dilemmes et actions absents au dénouement).
+function storyRecipes(input, total, child) {
+  const rand = seededRandom(`${input.storyId || input.seed || "histoire"}|${input.category}|${total}`);
+  const levels = twistRhythm(rand, total, child);
+  const sources = Object.keys(DILEMMA_SOURCES);
+  const families = Object.keys(ACTION_FAMILIES);
+  const recipes = [];
+  let previousFamilies = [];
+  for (let i = 0; i < total; i++) {
+    const recipe = { twist: levels[i] };
+    if (i < total - 1) {
+      const used = recipes.map(r => r.source).filter(Boolean);
+      const avoid = [...used.slice(-2)];
+      if (i < 2) avoid.push("passe");
+      if (i === 0) avoid.push("visiteur");
+      recipe.source = pickDistinct(rand, sources, 1, avoid)[0];
+      recipe.families = pickDistinct(rand, families, 2, previousFamilies);
+      previousFamilies = recipe.families;
+    }
+    recipes.push(recipe);
+  }
+  return recipes;
+}
+
+function recipeFor(input, plan) {
+  return storyRecipes(input, plan.total, plan.child)[plan.pageNumber - 1];
+}
+
+function recipeInstruction(recipe, plan) {
+  if (!recipe) return "";
+  const lines = [];
+  if (recipe.twist >= 0 && !plan.isEnd) lines.push(`INTENSITÉ DU REBONDISSEMENT : ${TWIST_LEVELS[recipe.twist]}`);
+  if (!plan.isEnd) {
+    lines.push(`SOURCE DU DILEMME DE FIN DE PAGE : ${DILEMMA_SOURCES[recipe.source]}.`);
+    lines.push(`TYPE D'ACTION DU CHOIX 1 : ${ACTION_FAMILIES[recipe.families[0]]}.`);
+    lines.push(`TYPE D'ACTION DU CHOIX 2 : ${ACTION_FAMILIES[recipe.families[1]]}.`);
+  }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // PROMPT
 // - Message système : les règles fixes de l'histoire (genre, voix, écriture, choix, format).
 // - Message utilisateur : l'état du récit, le texte déjà lu, le choix et sa conséquence prévue,
@@ -211,10 +359,12 @@ function buildSystemPrompt(input, plan) {
 - "texte" : ce que le lecteur voit. Une action concrète en une phrase courte (14 mots maximum) qui commence par un verbe à l'infinitif et vise une cible précise (qui, quoi, où). Ne révèle pas l'issue.
 - "suite" : invisible pour le lecteur. En une ou deux phrases, l'événement concret que ce choix déclenchera au début de la page suivante, et en quoi il fait avancer l'intrigue.
 Règles impératives :
-- LES DEUX CHOIX FONT AVANCER L'HISTOIRE. Il n'y a pas de « bon » choix et de choix « prudent » : ce sont deux stratégies actives et différentes, qui mènent chacune à une situation NOUVELLE (lieu, personnage, révélation, danger, objet gagné ou perdu, alliance ou rupture).
+- Chaque page indique la SOURCE DU DILEMME et le TYPE D'ACTION de chaque choix : respecte-les. Les deux choix sont deux gestes de nature différente (par exemple parler contre fouiller, protéger quelqu'un contre utiliser un objet), jamais deux variantes d'un même geste (deux portes, deux objets, deux personnes à suivre, dire oui ou non).
+- Ne construis pas la fin de page sur « le héros voit A et B, que prend-il ? ». Le dilemme naît de la situation indiquée, pas d'une liste d'options posée devant lui.
+- Pas de choix manichéen : aucun n'est le « bon » ou le « mauvais ». Chacun a un avantage réel et un prix réel, et chacun fait avancer l'histoire vers une situation NOUVELLE (lieu, personnage, révélation, danger, objet gagné ou perdu, alliance ou rupture).
 - Interdit pour les deux choix : attendre, réfléchir, observer encore, se cacher, faire demi-tour, rentrer, se reposer, demander une explication de plus, ou toute action qui ramène à une situation déjà vécue (voir « déjà vécu » dans la mémoire).
-- Les deux suites doivent être nettement différentes l'une de l'autre et rapprocher toutes deux l'histoire de son dénouement.
-- Choix typiques de ce genre : ${g.choix}.`;
+- Les deux suites sont nettement différentes l'une de l'autre et rapprochent toutes deux l'histoire de son dénouement.
+- Choix typiques de ce genre, à adapter : ${g.choix}.`;
 
   return `Tu es un romancier français de grand talent qui écrit, page après page, UN SEUL roman interactif continu. ` +
 `Le lecteur vit l'histoire de l'intérieur : ses choix comptent vraiment et l'histoire avance à chaque page.
@@ -238,13 +388,23 @@ Chaque page est la suite immédiate de la précédente, comme la page suivante d
 - Les surprises doivent sembler logiques après coup. Tant que le secret n'est pas révélé, n'y fais que des allusions ambiguës.
 - Termine la page sur une tension ou une question qui appelle la décision.
 
+PERSONNAGES
+Le héros et les 2 ou 3 autres personnages principaux ont chacun une vraie personnalité propre, originale, qui se voit dans leurs actes et leurs paroles, jamais dans une description plate :
+- un trait marquant, une contradiction, ce qu'il veut, ce qu'il cache, sa façon de parler (rythme, mots, tics), et son passé en une phrase qui explique pourquoi il est ainsi aujourd'hui.
+- Invente ces fiches à la page 1 et fais agir chaque personnage selon sa fiche. Un personnage peut surprendre, mais jamais en contradiction avec son passé.
+- Évite les prénoms et noms trop fréquents dans les histoires générées (Elara, Lysandre, Kael, Mara, Elias, Aria, Luna, Léo, Aurelia, Eldoria, Auroria, Thorn, Zephyr, Willow). Choisis des noms variés, concrets, propres au lieu et à l'époque.
+- Les personnages secondaires restent simples, un trait suffit.
+
+RYTHME ET REBONDISSEMENTS
+Chaque page reçoit une INTENSITÉ DU REBONDISSEMENT : respecte-la exactement. Une page calme n'a pas de twist ; un petit imprévu reste discret ; ne transforme pas toutes les pages en coups de théâtre. Le suspense vient aussi de ce qui reste non dit, d'une menace sourde, d'un mot de trop.
+
 CHOIX
 ${choiceRules}
 
-MÉMOIRE (champ "memoire", 700 caractères maximum, réécrite entièrement à chaque page)
+MÉMOIRE (champ "memoire", 1500 caractères maximum, réécrite entièrement à chaque page)
 Lignes courtes, dans cet ordre :
 OBJECTIF : ce que veut le héros et ce qui l'en empêche
-PERSONNAGES : nom, trait, relation
+PERSONNAGES : une fiche par personnage principal, au format « Nom : trait ; contradiction ; veut ; cache ; parle ainsi ; passé en une phrase ». Les secondaires en quelques mots.
 LIEUX ET OBJETS importants
 DÉJÀ VÉCU : quelques mots par page écrite, pour ne jamais revenir en arrière
 FILS OUVERTS
@@ -255,13 +415,14 @@ Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent 
 
 FORMAT DE RÉPONSE
 Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
-{"paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
+Commence par "plan" : une seule phrase, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
+{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
 }
 
 function buildUserPrompt(input, plan, maxPages = 3) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
-  const memo = String(input.memo || "").slice(0, 1000);
+  const memo = String(input.memo || "").slice(0, 1600);
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
@@ -270,7 +431,9 @@ function buildUserPrompt(input, plan, maxPages = 3) {
   const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
 
   const hero = cleanHero(input.hero);
+  const recipe = recipeInstruction(recipeFor(input, plan), plan);
   const state = `PAGE À ÉCRIRE : ${pageNumber} sur ${total}${isEnd ? " (dernière page)" : ""}.\nRÔLE DE CETTE PAGE : ${phaseInstruction(pageNumber, total, g)}` +
+    (recipe ? `\nRECETTE DE CETTE PAGE (imposée, ne la mentionne jamais dans le texte) :\n${recipe}` : "") +
     (hero ? `\nPRÉNOM DU HÉROS (le lecteur) : ${hero}` : "");
 
   if (!pages.length) {
@@ -377,7 +540,7 @@ function parseOutput(raw, isEnd) {
   const paragraphs = stripHeading(toParagraphs(value), titre);
   const page = paragraphs.join("\n\n");
   const choices = parseChoices(value);
-  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1000) : "";
+  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1500) : "";
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
   return {
@@ -385,7 +548,8 @@ function parseOutput(raw, isEnd) {
     choices: isEnd ? [] : choices.map(c => c.texte),
     directions: isEnd ? [] : choices.map(c => c.suite),
     memoire,
-    titre
+    titre,
+    plan: typeof value.plan === "string" ? cleanStoryText(value.plan).replace(/\s+/g, " ").slice(0, 400) : ""
   };
 }
 
@@ -508,20 +672,20 @@ async function callGroq(env, model, prompts, isEnd) {
         { role: "system", content: prompts.system },
         { role: "user", content: prompts.user }
       ],
-      temperature: 0.8,
+      temperature: 0.9,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
-      max_tokens: 2200,
+      max_tokens: 2800,
       ...groqParams(model),
       response_format: { type: "json_object" }
     })
   });
   if (!response.ok) throw await httpError("Groq", response);
   const data = await response.json();
-  return parseOutput(data.choices?.[0]?.message?.content || "", isEnd);
+  return { ...parseOutput(data.choices?.[0]?.message?.content || "", isEnd), usage: data.usage || null };
 }
 
 async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
-  const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 2500 };
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 3000 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
@@ -542,7 +706,7 @@ async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true)
     throw await httpError("Gemini", response);
   }
   const data = await response.json();
-  return parseOutput(data.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map(p => p.text || "").join("") || "", isEnd);
+  return { ...parseOutput(data.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map(p => p.text || "").join("") || "", isEnd), usage: data.usageMetadata || null };
 }
 
 // Lit le délai d'attente renvoyé par Groq : « retry-after » (secondes) ou
@@ -590,7 +754,9 @@ function shortModel(model) {
 // dès qu'un quota est atteint ou qu'un modèle ne répond pas correctement.
 async function generateWithFallback(env, input, plan) {
   const system = buildSystemPrompt(input, plan);
-  const chain = await engineChain(env);
+  let chain = await engineChain(env);
+  // TEMPORAIRE (comparaison de modèles) : un seul moteur demandé, sans secours.
+  if (input.engine) chain = chain.filter(e => `${e.provider}:${e.model}` === input.engine);
   const errors = [];
   const quotaWaits = [];
   let lastLimit = null;
@@ -688,14 +854,20 @@ export default {
     if (JSON.stringify(input).length > MAX_BODY_CHARS) return json({ error: "Contexte trop volumineux." }, 413);
 
     const plan = planPage(input);
+    // TEMPORAIRE : liste des moteurs disponibles, pour la comparaison.
+    if (input.engine === "list") return json({ chain: (await engineChain(env)).map(e => `${e.provider}:${e.model}`) });
+    const debug = input.debug === "compare";
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
     const outcome = await generateWithFallback(env, input, plan);
 
     if (outcome.result) {
-      let titre = outcome.result.titre;
-      if (!titre) titre = await requestTitle(env, input.category, outcome.result.page, outcome.result.memoire).catch(() => "");
-      return json({ ...outcome.result, titre, ...meta });
+      const { plan: hiddenPlan, usage, ...visible } = outcome.result;
+      let titre = visible.titre;
+      if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
+      const extra = debug ? { debug: { recette: recipeFor(input, plan), plan: hiddenPlan, usage } } : {};
+      return json({ ...visible, titre, ...meta, ...extra });
     }
+    if (debug) return json({ error: "échec", details: outcome.errors, retryAfter: outcome.retryAfter ?? null }, 502);
 
     const retryAfter = outcome.quota ? outcome.retryAfter : 2;
     let error = "Les moteurs gratuits sont temporairement indisponibles. Aucune génération payante n'a été tentée.";
