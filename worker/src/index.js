@@ -453,7 +453,7 @@ function buildSystemPrompt(input, plan, streaming = false) {
   const g = GENRES[input.category];
   const age = child ? (AGES.includes(input.age) ? input.age : "6–8 ans") : null;
   const ageGuide = child ? CHILD_AGE_GUIDES[age] : null;
-  const words = child ? ageGuide.words : "280 à 400";
+  const words = child ? ageGuide.words : "230 à 320";
   const needBible = !String(input.bible || "").trim();
 
   const publicLine = child
@@ -887,7 +887,7 @@ async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true)
   const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3500 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
-    generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
+    generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "minimal" };
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
   const response = await fetch(url, {
@@ -1154,7 +1154,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
   }
   const generationConfig = { temperature: 0.8, maxOutputTokens: 2200 };
   if (withThinkingConfig) {
-    generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
+    generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "minimal" };
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${engine.model}:streamGenerateContent?alt=sse&key=${env.GEMINI_API_KEY}`;
   const response = await fetch(url, {
