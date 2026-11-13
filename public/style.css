@@ -84,3 +84,8 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
   .full-choice{break-inside:avoid;background:none!important;border-left:1.5px solid #000!important;color:#222!important;font-style:italic;margin:.6cm 0 !important;padding:.1cm .4cm!important}
   body.print-no-choices .full-choice{display:none!important}
 }
+
+.engine-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 0 0 8px;vertical-align:middle;cursor:help}
+.engine-dot.dot-gemini{background:#ffffff;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.engine-dot.dot-groq{background:#e5484d;box-shadow:0 0 0 1px rgba(229,72,77,.35)}
+.engine-dot.dot-hidden{display:none}

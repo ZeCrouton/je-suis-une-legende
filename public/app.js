@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.7";
+const APP_VERSION = "1.8";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -137,7 +137,8 @@ async function generate(choiceIndex = null) {
       page: cleanText(data.page),
       choices: data.choices.map(cleanText),
       directions: Array.isArray(data.directions) ? data.directions : [],
-      choice: selectedChoice || "Début"
+      choice: selectedChoice || "Début",
+      provider: data.provider || ""
     });
     if (data.bible && !currentStory.bible) currentStory.bible = data.bible;
     currentStory.memo = data.memoire || currentStory.memo || "";
@@ -483,6 +484,17 @@ function renderFull(from){
 $("fullBack").addEventListener("click", () => { fullFrom === "libraryView" ? renderLibrary() : renderStory(); });
 
 // Affiche la page la plus récente, ou une page précédente en relecture (atIndex).
+// Pastille du moteur qui a écrit la page : blanche pour Gemini, rouge pour Groq.
+function setEngineDot(provider){
+  const dot = $("engineDot");
+  if (!dot) return;
+  const name = String(provider || "");
+  dot.className = "engine-dot";
+  if (/^Gemini/i.test(name)) { dot.classList.add("dot-gemini"); dot.title = `Écrit par ${name}`; }
+  else if (/^Groq/i.test(name)) { dot.classList.add("dot-groq"); dot.title = `Écrit par ${name}`; }
+  else { dot.title = ""; dot.classList.add("dot-hidden"); }
+}
+
 function renderStory(atIndex){
   stopReading();
   const pages = currentStory.pages;
@@ -491,6 +503,7 @@ function renderStory(atIndex){
   const isLatest = idx === n - 1;
   const page = pages[idx];
   displayedIndex = idx;
+  setEngineDot(page.provider);
 
   $("genreTag").textContent = currentStory.category;
   $("pageCount").textContent = `Page ${idx + 1}${currentStory.totalPages ? ` sur ${currentStory.totalPages}` : ""}${isLatest ? "" : " · relecture"}`;
