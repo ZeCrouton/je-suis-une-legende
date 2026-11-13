@@ -973,6 +973,8 @@ async function generateWithFallback(env, input, plan) {
         return { ...result, provider: `${engine.provider} · ${shortModel(engine.model)}` };
       } catch (e) {
         errors.push(`${engine.provider} ${engine.model}: ${e.message}${e.apiMessage ? ` (${e.apiMessage})` : ""}`);
+        // Visible dans Workers Logs : pourquoi un modèle a été écarté.
+        console.log(`[engine] ${key} · ${e.status ?? "sans statut"} · ${e.apiMessage || e.message}`);
         // Requête trop grosse pour ce modèle : une page d'historique en moins.
         if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
         // Quota atteint : ce modèle est mis de côté jusqu'à la fin du délai, on passe au suivant.
@@ -1225,7 +1227,25 @@ export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
     const url = new URL(request.url);
-    if (url.pathname === "/health") return json({ ok: true, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
+    if (url.pathname === "/health") {
+      // Diagnostic : /health?check=gemini fait un appel minuscule à Gemini et renvoie le statut exact (sans jamais afficher la clé).
+      if (url.searchParams.get("check") === "gemini" && env.GEMINI_API_KEY) {
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Réponds OK." }] }], generationConfig: { maxOutputTokens: 5 } })
+          });
+          const body = await r.text();
+          let message = body;
+          try { message = JSON.parse(body)?.error?.message || body; } catch { /* texte brut */ }
+          return json({ gemini: { status: r.status, ok: r.ok, message: String(message).slice(0, 300) } });
+        } catch (e) {
+          return json({ gemini: { status: "réseau", message: String(e.message || e).slice(0, 300) } });
+        }
+      }
+      return json({ ok: true, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
+    }
     if (url.pathname !== "/api/story" || request.method !== "POST") return json({ error: "Not found" }, 404);
     if (env.FREE_ONLY !== "true") return json({ error: "Génération bloquée : le mode gratuit strict n'est pas activé." }, 503);
     if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: "Aucune clé IA n'est configurée." }, 503);
