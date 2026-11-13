@@ -611,7 +611,9 @@ function geminiRank(name) {
   const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
   const lite = /lite/.test(name) ? 1 : 0;
   const preview = /preview|latest/.test(name) ? 1 : 0;
-  return [-version, lite, preview, name.length];
+  // gemini-2.5-flash passe en tête : sans réflexion préalable, il répond bien plus vite que la série 3.
+  const fast = /^gemini-2\.5-flash$/.test(name) ? 0 : 1;
+  return [fast, -version, lite, preview, name.length];
 }
 
 async function geminiModels(env) {
