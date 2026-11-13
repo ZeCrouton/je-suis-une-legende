@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.1";
+const APP_VERSION = "1.2";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -80,6 +80,10 @@ async function generate(choiceIndex = null) {
   const last = currentStory.pages[currentStory.pages.length - 1];
   const selectedChoice = choiceIndex === null ? null : last.choices[choiceIndex];
   const selectedDirection = choiceIndex === null ? "" : (last.directions?.[choiceIndex] || "");
+  // Le choix que le lecteur n'a pas pris : le serveur ne s'en sert que s'il a une incidence sur l'histoire.
+  const otherIndex = choiceIndex === null ? null : (choiceIndex === 0 ? 1 : 0);
+  const otherChoice = otherIndex === null ? "" : (last.choices[otherIndex] || "");
+  const otherDirection = otherIndex === null ? "" : (last.directions?.[otherIndex] || "");
   $("providerNote").textContent = "";
 
   const buttons = [
@@ -112,7 +116,9 @@ async function generate(choiceIndex = null) {
     memo: currentStory.memo || "",
     selectedChoice,
     // Conséquence prévue par l'IA pour ce choix : la page suivante doit la réaliser.
-    selectedDirection
+    selectedDirection,
+    otherChoice,
+    otherDirection
   };
 
   // Délais de secours, utilisés seulement si le serveur n'indique pas le temps d'attente exact.

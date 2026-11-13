@@ -461,6 +461,11 @@ function buildSystemPrompt(input, plan, streaming = false) {
     : `Propose exactement deux choix. Chacun contient :
 - "texte" : ce que le lecteur voit. Une action concrète en une phrase courte (14 mots maximum) qui commence par un verbe à l'infinitif et vise une cible précise (qui, quoi, où). Ne révèle pas l'issue.
 - "suite" : invisible pour le lecteur. En une ou deux phrases, l'événement concret que ce choix déclenchera au début de la page suivante, et en quoi il fait avancer l'intrigue.
+Cohérence entre le texte et les choix (priorité absolue) :
+- Ancrage : chaque choix doit être faisable par le héros à l'instant exact où la page s'arrête, avec ce que le texte de la page a déjà montré (personnages présents, objets, lieux, informations que le héros connaît). N'introduis dans un choix aucun personnage, objet, lieu ou savoir que le lecteur n'a pas vu dans le texte.
+- Le dernier paragraphe de la page pose clairement la situation de décision, et les deux choix y répondent directement. Nomme les personnes, objets et lieux comme dans le texte, pour que le choix soit compréhensible sans mémoire.
+- Les deux choix s'excluent vraiment : faire l'un empêche de faire l'autre, au moins sur le moment.
+- La "suite" de chaque choix découle de CE QUE DIT le choix (même geste, même cible) et de ce que le héros sait. Elle ne contredit ni le lieu, ni les personnes présentes, ni l'état du héros à la fin de la page.
 Règles impératives :
 - Chaque page indique la SOURCE DU DILEMME et le TYPE D'ACTION de chaque choix : respecte-les. Les deux choix sont deux gestes de nature différente (par exemple parler contre fouiller, protéger quelqu'un contre utiliser un objet), jamais deux variantes d'un même geste (deux portes, deux objets, deux personnes à suivre, dire oui ou non).
 - Ne construis pas la fin de page sur « le héros voit A et B, que prend-il ? ». Le dilemme naît de la situation indiquée, pas d'une liste d'options posée devant lui.
@@ -490,6 +495,8 @@ Chaque page est la suite immédiate de la précédente, comme la page suivante d
 - Montre, n'explique pas ce que le lecteur doit ressentir.
 - Les surprises doivent sembler logiques après coup. Tant que le secret n'est pas révélé, n'y fais que des allusions ambiguës.
 - Termine la page sur une tension ou une question qui appelle la décision.
+- Quand une page suit un choix du lecteur, elle commence par réaliser ce choix tel qu'il est écrit (même geste, même cible, au même endroit, avec les personnes déjà présentes), puis en montre les conséquences. Aucune téléportation, aucun personnage absent qui surgit sans raison, aucune information que le héros ne peut pas avoir.
+- Avant de rendre la page, vérifie que chaque nom, lieu, objet et fait de ta page est cohérent avec la mémoire et le texte déjà lu, et que tes deux choix respectent les règles de cohérence ci-dessus.
 
 PERSONNAGES
 Le héros et les 2 ou 3 autres personnages principaux ont chacun une vraie personnalité propre, originale, qui se voit dans leurs actes et leurs paroles, jamais dans une description plate :
@@ -511,6 +518,7 @@ PERSONNAGES : une fiche par personnage principal, 2 à 3 mots par rubrique : « 
 LIEUX ET OBJETS : quelques mots
 DÉJÀ VÉCU : 3 à 5 mots par page
 FILS OUVERTS : quelques mots
+ÉCARTÉ : choix non pris dont l'effet pèse encore sur l'histoire (quelques mots ; rien s'il n'en reste aucun)
 SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
 
 TITRE
@@ -540,6 +548,8 @@ function buildUserPrompt(input, plan, maxPages = 2) {
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
+  const otherChoice = input.otherChoice ? String(input.otherChoice).slice(0, 300) : "";
+  const otherDirection = input.otherDirection ? String(input.otherDirection).slice(0, 400) : "";
 
   const history = Array.isArray(input.history) ? input.history.slice(-maxPages) : [];
   const pages = history.map(p => cleanStoryText(String(p.page || "")).slice(0, 3500));
@@ -580,6 +590,9 @@ ${storySoFar}
 
 CHOIX DU LECTEUR À LA FIN DE CETTE PAGE : « ${selectedChoice || "continuer"} »
 ${selectedDirection ? `CE QUE CE CHOIX DÉCLENCHE (prévu à la page précédente) : ${selectedDirection}\nRéalise-le dès le premier paragraphe, puis va plus loin.\n` : ""}
+${otherChoice && selectedChoice ? `CHOIX ÉCARTÉ (proposé en même temps, que le lecteur n'a PAS pris) : « ${otherChoice} »${otherDirection ? `\nCe qu'il aurait déclenché : ${otherDirection}` : ""}
+Prends-le en compte SEULEMENT si ne pas l'avoir fait a une vraie incidence sur la situation créée par le choix pris (une occasion perdue, un danger qui grandit faute d'avoir agi, quelqu'un d'autre qui agit à la place du héros, un personnage déçu ou soulagé). Dans ce cas, une seule conséquence discrète, intégrée au récit, sans jamais parler de « choix » ni d'« option », et sans jouer la suite du choix écarté. Si cela n'a aucune incidence logique, ignore-le complètement.
+` : ""}
 DERNIÈRES LIGNES LUES (ta page commence juste après, sans coupure) :
 « ${lastLines} »
 
