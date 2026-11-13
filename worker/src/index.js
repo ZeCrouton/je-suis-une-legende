@@ -312,6 +312,109 @@ function storyRecipes(input, total, child) {
   return recipes;
 }
 
+// ---------------------------------------------------------------------------
+// INSPIRATIONS D'AUTEURS
+// Deux auteurs sont tirés par histoire (selon son identifiant) : une voix cohérente du début à la fin,
+// différente d'une histoire à l'autre. L'IA s'inspire de la manière d'écrire, telle qu'on la lit en français.
+// ---------------------------------------------------------------------------
+const AUTHORS = {
+  "Fantasy": [
+    ["J.R.R. Tolkien", "souffle épique, lieux chargés d'histoire"],
+    ["Ursula K. Le Guin", "sobriété, magie qui a un prix"],
+    ["Robin Hobb", "personnages fragiles, lente montée de l'émotion"],
+    ["Terry Pratchett", "ironie, observation humaine"],
+    ["Joe Abercrombie", "réalisme brut, héros ambigus"]
+  ],
+  "Science-fiction": [
+    ["Isaac Asimov", "idées claires, dialogues et raisonnement"],
+    ["Philip K. Dick", "doute sur la réalité, paranoïa"],
+    ["Ray Bradbury", "poésie, nostalgie, images fortes"],
+    ["Frank Herbert", "politique, intrigues, vision à long terme"],
+    ["Liu Cixin", "échelle cosmique, dilemmes froids"]
+  ],
+  "Thriller": [
+    ["Harlan Coben", "rebondissements, secrets de famille"],
+    ["Pierre Lemaitre", "cynisme, mécanique implacable"],
+    ["Dan Brown", "chapitres courts, énigmes, rythme haletant"],
+    ["Patricia Highsmith", "tension psychologique, amoralité tranquille"],
+    ["Franck Thilliez", "indices, obsessions, ambiance sombre"]
+  ],
+  "Horreur": [
+    ["Stephen King", "quotidien qui bascule, personnages vrais"],
+    ["H.P. Lovecraft", "peur de l'inconnu, descriptions oppressantes"],
+    ["Edgar Allan Poe", "narrateur fiévreux, culpabilité"],
+    ["Shirley Jackson", "malaise diffus, maison hantée par les gens"],
+    ["Guy de Maupassant", "peur suggérée, folie qui s'installe"]
+  ],
+  "Romance": [
+    ["Jane Austen", "esprit, ironie sociale, dialogues fins"],
+    ["Marc Levy", "sentiments simples, coups du sort, ton accessible"],
+    ["Guillaume Musso", "romance et mystère, secrets du passé"],
+    ["Nicholas Sparks", "émotion directe, grands sentiments"],
+    ["Colleen Hoover", "intensité, blessures intimes, rythme rapide, sans scène explicite"]
+  ],
+  "Aventure": [
+    ["Alexandre Dumas", "panache, rebondissements, amitiés"],
+    ["Jules Verne", "voyage, émerveillement, précision des lieux"],
+    ["Robert Louis Stevenson", "trésors, mer, pièges moraux"],
+    ["Jack London", "nature hostile, survie, endurance"],
+    ["Michael Crichton", "aventure et science, rythme efficace"]
+  ],
+  "Policier": [
+    ["Georges Simenon", "sobriété, atmosphère, psychologie"],
+    ["Agatha Christie", "énigme, suspects en cercle fermé, indices honnêtes"],
+    ["Raymond Chandler", "détective désabusé, images, cynisme"],
+    ["Fred Vargas", "enquêteurs excentriques, poésie, intuition"],
+    ["Arthur Conan Doyle", "déduction, détails qui trahissent"]
+  ],
+  "Mystère": [
+    ["Maurice Leblanc", "gentleman, ruses, inversions"],
+    ["Gaston Leroux", "énigme de la chambre close, romanesque"],
+    ["Daphné du Maurier", "demeure, secret, suspense feutré"],
+    ["Umberto Eco", "savoir, symboles, enquête érudite"],
+    ["Carlos Ruiz Zafón", "ville nocturne, livres, mystère romantique"]
+  ],
+  "Conte pour enfant": [
+    ["Charles Perrault", "forme de conte, morale, rythme simple"],
+    ["Hans Christian Andersen", "tendresse, mélancolie, objets qui vivent"],
+    ["Antoine de Saint-Exupéry", "simplicité, poésie, regard d'enfant"],
+    ["Roald Dahl", "humour, méchants truculents, malice"],
+    ["Michael Ende", "imaginaire doux, amitié, courage"]
+  ],
+  "Comédie": [
+    ["Molière", "quiproquos, travers humains, rythme du dialogue"],
+    ["René Goscinny", "jeux de mots, personnages caricaturaux, gags"],
+    ["Jerome K. Jerome", "humour anglais, digressions"],
+    ["Douglas Adams", "absurde, logique folle"],
+    ["Alexandre Jardin", "fantaisie, romanesque, exagération assumée"]
+  ]
+};
+// Pour les 3–5 ans, seuls les conteurs les plus simples sont retenus.
+const YOUNG_CHILD_AUTHORS = ["Charles Perrault", "Hans Christian Andersen", "Antoine de Saint-Exupéry"];
+
+function pickAuthors(input) {
+  let list = AUTHORS[input.category] || [];
+  if (input.category === "Conte pour enfant" && input.age === "3–5 ans") {
+    list = list.filter(([name]) => YOUNG_CHILD_AUTHORS.includes(name));
+  }
+  if (!list.length) return [];
+  const rand = seededRandom(`auteurs|${input.storyId || input.seed || "histoire"}|${input.category}`);
+  const pool = [...list];
+  const out = [];
+  while (out.length < 2 && pool.length) out.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  return out;
+}
+
+function authorsInstruction(input) {
+  const picked = pickAuthors(input);
+  if (!picked.length) return "";
+  return `INSPIRATION LITTÉRAIRE
+Écris dans l'esprit de ces auteurs, tels qu'on les lit en traduction française : ${picked.map(([name, traits]) => `${name} (${traits})`).join(" ; ")}.
+Inspire-toi de leur manière (rythme des phrases, ton, regard sur les personnages), jamais de leurs phrases, de leurs intrigues ni de leurs personnages. Ne cite aucun nom d'auteur dans le texte. Le style reste du français naturel et fluide.
+
+`;
+}
+
 function recipeFor(input, plan) {
   return storyRecipes(input, plan.total, plan.child)[plan.pageNumber - 1];
 }
@@ -395,7 +498,7 @@ Le héros et les 2 ou 3 autres personnages principaux ont chacun une vraie perso
 - Évite les prénoms et noms trop fréquents dans les histoires générées (Elara, Lysandre, Kael, Mara, Elias, Aria, Luna, Léo, Aurelia, Eldoria, Auroria, Thorn, Zephyr, Willow). Choisis des noms variés, concrets, propres au lieu et à l'époque.
 - Les personnages secondaires restent simples, un trait suffit.
 
-RYTHME ET REBONDISSEMENTS
+${authorsInstruction(input)}RYTHME ET REBONDISSEMENTS
 Chaque page reçoit une INTENSITÉ DU REBONDISSEMENT : respecte-la exactement. Une page calme n'a pas de twist ; un petit imprévu reste discret ; ne transforme pas toutes les pages en coups de théâtre. Le suspense vient aussi de ce qui reste non dit, d'une menace sourde, d'un mot de trop.
 
 CHOIX
