@@ -518,6 +518,7 @@ PERSONNAGES : une fiche par personnage principal, 2 à 3 mots par rubrique : « 
 LIEUX ET OBJETS : quelques mots
 DÉJÀ VÉCU : 3 à 5 mots par page
 FILS OUVERTS : quelques mots
+(ne mets pas de ligne ÉTAT : elle est ajoutée automatiquement)
 ÉCARTÉ : choix non pris dont l'effet pèse encore sur l'histoire (quelques mots ; rien s'il n'en reste aucun)
 SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
 
@@ -527,7 +528,8 @@ Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent 
 ${streaming ? streamFormat(isEnd) : `FORMAT DE RÉPONSE
 Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
 Commence par "plan" : 15 mots maximum, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
-{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`}`;
+Place "etat" juste après "paragraphes" et avant "choix" : 30 mots maximum, écrits à partir de ta dernière ligne, qui disent où est exactement le héros, qui est présent, ce qu'il tient et ce qu'il sait à la fin de la page. Tes deux choix doivent découler de cet état.
+{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"etat":"…","choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`}`;
 }
 
 // Format pour l'écriture en direct : le texte de la page d'abord (il s'affiche pendant qu'il s'écrit),
@@ -544,7 +546,7 @@ function streamFormat(isEnd) {
 function buildUserPrompt(input, plan, maxPages = 2) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
-  const memo = String(input.memo || "").slice(0, 1100);
+  const memo = String(input.memo || "").slice(0, 1450);
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
@@ -576,6 +578,7 @@ IDÉE DE DÉPART DU LECTEUR : ${seed || "libre : invente un point de départ ori
     return page + decision;
   }).join("\n\n");
 
+  const stateLine = (memo.match(/^ÉTAT\s*:\s*(.+)$/m) || [])[1] || "";
   const lastPage = pages[pages.length - 1];
   const lastLines = lastPage.split(/\n+/).filter(Boolean).slice(-2).join("\n").slice(-600);
   const skipped = pageNumber - 1 - pages.length;
@@ -590,7 +593,7 @@ ${storySoFar}
 
 CHOIX DU LECTEUR À LA FIN DE CETTE PAGE : « ${selectedChoice || "continuer"} »
 ${selectedDirection ? `CE QUE CE CHOIX DÉCLENCHE (prévu à la page précédente) : ${selectedDirection}\nRéalise-le dès le premier paragraphe, puis va plus loin.\n` : ""}
-${otherChoice && selectedChoice ? `CHOIX ÉCARTÉ (proposé en même temps, que le lecteur n'a PAS pris) : « ${otherChoice} »${otherDirection ? `\nCe qu'il aurait déclenché : ${otherDirection}` : ""}
+${stateLine ? `ÉTAT EXACT À LA FIN DE LA PAGE PRÉCÉDENTE : ${stateLine}\nTa page commence dans cet état : même lieu, mêmes personnes présentes, mêmes objets, mêmes connaissances, sauf ce que le choix pris change.\n` : ""}${otherChoice && selectedChoice ? `CHOIX ÉCARTÉ (proposé en même temps, que le lecteur n'a PAS pris) : « ${otherChoice} »${otherDirection ? `\nCe qu'il aurait déclenché : ${otherDirection}` : ""}
 Prends-le en compte SEULEMENT si ne pas l'avoir fait a une vraie incidence sur la situation créée par le choix pris (une occasion perdue, un danger qui grandit faute d'avoir agi, quelqu'un d'autre qui agit à la place du héros, un personnage déçu ou soulagé). Dans ce cas, une seule conséquence discrète, intégrée au récit, sans jamais parler de « choix » ni d'« option », et sans jouer la suite du choix écarté. Si cela n'a aucune incidence logique, ignore-le complètement.
 ` : ""}
 DERNIÈRES LIGNES LUES (ta page commence juste après, sans coupure) :
@@ -652,6 +655,28 @@ function parseChoices(value) {
   })).filter(c => c.texte).slice(0, 2);
 }
 
+// Contrôle de cohérence côté serveur : un choix ne doit citer aucun nom propre absent du récit.
+function stripAccents(text) { return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function coherenceIssue(result, input) {
+  if (!result.choices || result.choices.length !== 2) return "";
+  const known = stripAccents([
+    result.page, result.memoire, input.memo,
+    ...(Array.isArray(input.history) ? input.history.map(h => h.page) : []),
+    input.seed, input.hero
+  ].join(" "));
+  const missing = [];
+  for (const choice of result.choices) {
+    const words = String(choice).split(/\s+/).slice(1);
+    for (const w of words) {
+      const clean = w.replace(/^[«"'(]+|[»"')?!.,;:…]+$/g, "");
+      if (clean.length >= 3 && /^\p{Lu}/u.test(clean) && !known.includes(stripAccents(clean))) missing.push(clean);
+    }
+  }
+  if (missing.length) return `les choix citent « ${[...new Set(missing)].join(", ")} », absent du récit. Réécris les deux choix en n'utilisant que des personnages, objets et lieux présents dans ta page.`;
+  if (stripAccents(result.choices[0]) === stripAccents(result.choices[1])) return "les deux choix sont identiques. Écris deux choix différents.";
+  return "";
+}
+
 function parseOutput(raw, isEnd) {
   let value;
   try {
@@ -667,7 +692,11 @@ function parseOutput(raw, isEnd) {
   const paragraphs = stripHeading(toParagraphs(value), titre);
   const page = paragraphs.join("\n\n");
   const choices = parseChoices(value);
-  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1100) : "";
+  const etat = typeof value.etat === "string" ? cleanStoryText(value.etat).replace(/\s+/g, " ").trim().slice(0, 300) : "";
+  // La ligne ÉTAT (où est le héros, qui est là, ce qu'il tient) est placée en tête de la mémoire, remplaçant la précédente.
+  const body = (typeof value.memoire === "string" ? cleanStoryText(value.memoire) : "")
+    .split("\n").filter(l => !/^\s*ÉTAT\s*:/i.test(l)).join("\n").slice(0, 1100);
+  const memoire = etat ? `ÉTAT : ${etat}\n${body}` : body;
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
   return {
@@ -801,7 +830,7 @@ async function callGroq(env, model, prompts, isEnd) {
         { role: "system", content: prompts.system },
         { role: "user", content: prompts.user }
       ],
-      temperature: 0.9,
+      temperature: 0.8,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
       max_tokens: 2400,
       ...groqParams(model),
@@ -814,7 +843,7 @@ async function callGroq(env, model, prompts, isEnd) {
 }
 
 async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
-  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 3500 };
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3500 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
@@ -893,10 +922,13 @@ async function generateWithFallback(env, input, plan) {
 
   const tryEngine = async engine => {
     const key = `${engine.provider}:${engine.model}`;
-    let maxPages = 2;
+    let maxPages = 2, correction = "", kept = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) }, plan.isEnd);
+        const result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) + correction }, plan.isEnd);
+        // Incohérence détectée : une seule nouvelle écriture, avec la correction demandée ; sinon on garde la page telle quelle.
+        const issue = plan.isEnd || attempt > 1 || correction ? "" : coherenceIssue(result, input);
+        if (issue) { correction = `\n\nCORRECTION OBLIGATOIRE : ta version précédente avait un défaut de cohérence : ${issue}`; attempt--; kept = result; errors.push(`${engine.provider} ${engine.model}: ${issue}`); continue; }
         return { ...result, provider: `${engine.provider} · ${shortModel(engine.model)}` };
       } catch (e) {
         errors.push(`${engine.provider} ${engine.model}: ${e.message}${e.apiMessage ? ` (${e.apiMessage})` : ""}`);
@@ -908,11 +940,11 @@ async function generateWithFallback(env, input, plan) {
           exhausted.set(key, Date.now() + wait * 1000);
           quotaWaits.push({ engine, wait });
           if (e.limit) lastLimit = e.limit;
-          return null;
+          return kept ? { ...kept, provider: `${engine.provider} · ${shortModel(engine.model)}` } : null;
         }
-        // Réponse mal formée : on réessaie une fois le même modèle.
+        // Réponse mal formée : on réessaie une fois le même modèle (si une page correcte existe déjà, on la garde).
         if (e.status === undefined && attempt < 2) continue;
-        return null;
+        return kept ? { ...kept, provider: `${engine.provider} · ${shortModel(engine.model)}` } : null;
       }
     }
     return null;
@@ -1064,7 +1096,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
       body: JSON.stringify({
         model: engine.model,
         messages: [{ role: "system", content: prompts.system }, { role: "user", content: prompts.user }],
-        temperature: 0.9, max_tokens: 2400, ...groqParams(engine.model), stream: true
+        temperature: 0.8, max_tokens: 2400, ...groqParams(engine.model), stream: true
       })
     });
     if (!response.ok) throw await httpError("Groq", response);
@@ -1072,7 +1104,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
       for await (const d of sseData(response)) yield d.choices?.[0]?.delta?.content || "";
     })();
   }
-  const generationConfig = { temperature: 0.9, maxOutputTokens: 2200 };
+  const generationConfig = { temperature: 0.8, maxOutputTokens: 2200 };
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
   }

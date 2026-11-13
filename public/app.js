@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.2";
+const APP_VERSION = "1.3";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
