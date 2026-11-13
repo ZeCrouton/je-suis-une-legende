@@ -720,13 +720,13 @@ function parseOutput(raw, isEnd) {
 
 // Groq : par ordre de préférence. Sur le plan Free, tous les modèles sont gratuits.
 const GROQ_PREFERENCES = [
-  /^openai\/gpt-oss-20b$/,
   /^openai\/gpt-oss-120b$/,
+  /^openai\/gpt-oss-20b$/,
   /^qwen\/qwen3[\w.-]*$/,
   /^llama-3\.3-70b-versatile$/,
   /^meta-llama\/llama-4-(maverick|scout)[\w.-]*$/
 ];
-const GROQ_DEFAULTS = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"];
+const GROQ_DEFAULTS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 
 // Gemini : uniquement les familles Flash et Flash-Lite, qui ont un niveau gratuit.
 // Exclus : Pro, modèles d'image, de son, de vidéo, « Omni » et expérimentaux (payants ou très limités).
