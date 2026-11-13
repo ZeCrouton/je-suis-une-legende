@@ -401,13 +401,13 @@ Chaque page reçoit une INTENSITÉ DU REBONDISSEMENT : respecte-la exactement. U
 CHOIX
 ${choiceRules}
 
-MÉMOIRE (champ "memoire", 1500 caractères maximum, réécrite entièrement à chaque page)
+MÉMOIRE (champ "memoire", 900 caractères maximum, style télégraphique, réécrite entièrement à chaque page)
 Lignes courtes, dans cet ordre :
-OBJECTIF : ce que veut le héros et ce qui l'en empêche
-PERSONNAGES : une fiche par personnage principal, au format « Nom : trait ; contradiction ; veut ; cache ; parle ainsi ; passé en une phrase ». Les secondaires en quelques mots.
-LIEUX ET OBJETS importants
-DÉJÀ VÉCU : quelques mots par page écrite, pour ne jamais revenir en arrière
-FILS OUVERTS
+OBJECTIF : ce que veut le héros / ce qui l'en empêche
+PERSONNAGES : une fiche par personnage principal, 2 à 3 mots par rubrique : « Nom : trait / contradiction / veut / cache / parle / passé ». Secondaires : nom + un mot.
+LIEUX ET OBJETS : quelques mots
+DÉJÀ VÉCU : 3 à 5 mots par page
+FILS OUVERTS : quelques mots
 SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
 
 TITRE
@@ -415,14 +415,14 @@ Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent 
 
 FORMAT DE RÉPONSE
 Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
-Commence par "plan" : une seule phrase, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
+Commence par "plan" : 15 mots maximum, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
 {"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`;
 }
 
-function buildUserPrompt(input, plan, maxPages = 3) {
+function buildUserPrompt(input, plan, maxPages = 2) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
-  const memo = String(input.memo || "").slice(0, 1600);
+  const memo = String(input.memo || "").slice(0, 1100);
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
@@ -540,7 +540,7 @@ function parseOutput(raw, isEnd) {
   const paragraphs = stripHeading(toParagraphs(value), titre);
   const page = paragraphs.join("\n\n");
   const choices = parseChoices(value);
-  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1500) : "";
+  const memoire = typeof value.memoire === "string" ? cleanStoryText(value.memoire).slice(0, 1100) : "";
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
   return {
@@ -676,7 +676,7 @@ async function callGroq(env, model, prompts, isEnd) {
       ],
       temperature: 0.9,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
-      max_tokens: 2800,
+      max_tokens: 2400,
       ...groqParams(model),
       response_format: { type: "json_object" }
     })
@@ -687,7 +687,7 @@ async function callGroq(env, model, prompts, isEnd) {
 }
 
 async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
-  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 3000 };
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 2200 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
@@ -766,7 +766,7 @@ async function generateWithFallback(env, input, plan) {
 
   const tryEngine = async engine => {
     const key = `${engine.provider}:${engine.model}`;
-    let maxPages = 3;
+    let maxPages = 2;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const result = await callEngine(env, engine, { system, user: buildUserPrompt(input, plan, maxPages) }, plan.isEnd);
