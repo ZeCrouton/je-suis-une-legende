@@ -66,6 +66,8 @@ function paragraphs(text){
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 
 let generating = false;
+// Écriture en direct désactivée : le format texte n'est pas assez fiable avec les modèles gratuits.
+const LIVE_WRITING = false;
 
 // choiceIndex : index du choix cliqué sur la dernière page (null pour la première page).
 async function generate(choiceIndex = null) {
@@ -136,11 +138,13 @@ async function generate(choiceIndex = null) {
     restoreButton();
     $("startBtn").disabled = false;
     renderStory();
-    $("providerNote").textContent = "Histoire enregistrée sur cet appareil";
+    // TEMPORAIRE (diagnostic de lenteur) : moteur utilisé et durée réelle.
+    $("providerNote").textContent = `Diagnostic : ${data.provider || "?"} · ${Math.round((Date.now() - t0) / 1000)} s`;
   };
 
   // D'abord l'écriture en direct, avec la plume ; en cas de souci, génération classique.
-  const live = await streamPage(body);
+  const t0 = Date.now();
+  const live = LIVE_WRITING ? await streamPage(body) : null;
   if (live) { applyResult(live); return; }
 
   for (let attempt = 1; attempt <= 6; attempt++) {
