@@ -69,7 +69,7 @@ const GENRES = {
     choix: "pirater un système, désobéir à un protocole, contacter une entité, tester une technologie expérimentale, révéler des données, quitter la station ou le vaisseau"
   },
   "Thriller": {
-    ton: "Suspense haletant et compte à rebours. Phrases courtes et nerveuses. Le héros est traqué ou piégé et l'étau se resserre à chaque page. Informations au compte-gouttes, personne n'est vraiment fiable.",
+    ton: "Suspense haletant, une échéance qui approche. Phrases courtes et nerveuses. Le héros est traqué ou piégé et l'étau se resserre à chaque page. Informations au compte-gouttes, personne n'est vraiment fiable.",
     narration: "troisième personne, au présent de narration, au plus près du héros",
     moteur: "un danger immédiat et une échéance",
     secret: "l'identité réelle de l'ennemi ou du commanditaire, ou une trahison très proche du héros",
@@ -160,22 +160,21 @@ const CHILD_AGE_GUIDES = {
 // Le rôle est imposé par le code, pour que la fin arrive toujours et que la tension monte.
 function phaseInstruction(pageNumber, total, g) {
   if (pageNumber === 1) {
-    return `OUVERTURE. Lance l'histoire avec ${g.moteur}. Présente le protagoniste (nom, désir, faiblesse) directement en situation, ` +
-      `sème un détail anodin qui comptera plus tard, et termine la page sur un moment de décision.`;
+    return `OUVERTURE. Écris d'abord la bible, puis la page 1 : lance l'histoire avec ${g.moteur}. Présente le héros en situation, laisse entrevoir sa blessure intime par un détail, ` +
+      `sème un détail anodin qui comptera plus tard, et termine sur un moment de décision.`;
   }
   if (pageNumber >= total) {
-    return `DÉNOUEMENT. ${capitalize(g.fin)}. Le secret se révèle, les fils ouverts se nouent, les choix précédents pèsent sur l'issue. ` +
-      `C'est la fin : aucun choix à proposer.`;
+    return `DÉNOUEMENT. Dans les premiers paragraphes, montre comment le choix final règle la confrontation, par les actes du héros et grâce aux détails semés plus tôt (aucun hasard, aucun sauveur tombé du ciel). ` +
+      `${capitalize(g.fin)}. Puis prends le temps de l'après : ce que deviennent les personnages principaux, la blessure du héros apaisée ou assumée, un dernier échange avec un personnage cher, une dernière image qui fait écho au début. ` +
+      `Le secret est révélé s'il ne l'est pas encore. Pas de nouvelle action. Aucun choix à proposer.`;
   }
   if (pageNumber === total - 1) {
-    return `CLIMAX. ${capitalize(g.climax)}. Fais monter la tension au maximum, puis place le lecteur devant un dilemme final : ` +
-      `les deux choix mènent à deux fins très différentes.`;
+    return `CLIMAX. ${capitalize(g.climax)}. Tout ce qui a été semé converge ici. Termine sur le dilemme final : les deux choix mènent à deux fins très différentes, et l'un touche directement à la blessure du héros.`;
   }
   if (pageNumber === total - 2) {
-    return `TOURNANT. ${capitalize(g.tournant)}. Le secret commence à affleurer. Les choix proposés préparent le dilemme final.`;
+    return `TOURNANT. ${capitalize(g.tournant)}. Le secret affleure. Les choix préparent le dilemme final.`;
   }
-  return `DÉVELOPPEMENT. Réalise ce que le choix déclenche, puis ajoute une complication nouvelle ou une révélation partielle. ` +
-    `L'intrigue progresse d'une étape réelle vers le dénouement.`;
+  return `DÉVELOPPEMENT. Réalise l'effet du choix, puis atteins l'étape prévue par la trame pour cette page : l'intrigue progresse d'une étape réelle.`;
 }
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -221,7 +220,7 @@ const DILEMMA_SOURCES = {
   secret: "un secret que le héros détient ou découvre et qu'il peut taire ou utiliser",
   visiteur: "l'arrivée inattendue de quelqu'un ou de quelque chose qui oblige à réagir tout de suite",
   passe: "la conséquence d'un choix passé qui revient frapper le héros (précise lequel)",
-  regle: "une règle du monde ou de l'histoire (magie, loi, rituel, interdit) qui impose un prix à toute action"
+  regle: "une contrainte qui impose un prix : loi, règlement, promesse faite, code d'honneur, interdit (règle magique seulement dans un genre surnaturel)"
 };
 
 const ACTION_FAMILIES = {
@@ -424,7 +423,7 @@ function recipeInstruction(recipe, plan) {
   const lines = [];
   if (recipe.twist >= 0 && !plan.isEnd) lines.push(`INTENSITÉ DU REBONDISSEMENT : ${TWIST_LEVELS[recipe.twist]}`);
   if (!plan.isEnd) {
-    lines.push(`SOURCE DU DILEMME DE FIN DE PAGE : ${DILEMMA_SOURCES[recipe.source]}.`);
+    lines.push(`SOURCE DU DILEMME SUGGÉRÉE (si elle sert la trame et le genre ; sinon garde le dilemme naturel de la trame) : ${DILEMMA_SOURCES[recipe.source]}.`);
     lines.push(`TYPE D'ACTION DU CHOIX 1 : ${ACTION_FAMILIES[recipe.families[0]]}.`);
     lines.push(`TYPE D'ACTION DU CHOIX 2 : ${ACTION_FAMILIES[recipe.families[1]]}.`);
   }
@@ -438,98 +437,112 @@ function recipeInstruction(recipe, plan) {
 //   puis, tout à la fin, les dernières lignes lues : c'est ce que le modèle voit en dernier
 //   avant d'écrire, ce qui l'aide à enchaîner au lieu de recommencer un nouveau chapitre.
 // ---------------------------------------------------------------------------
+// Genres réalistes : aucun surnaturel ni gadget impossible.
+const REALISTIC_GENRES = ["Thriller", "Policier", "Romance", "Comédie"];
+
+// Formules usées que les modèles répètent : interdites.
+const BANNED_PHRASES = [
+  "le cœur battant comme un marteau / son cœur bat la chamade", "le sang se glace", "un silence lourd / pesant / de plomb",
+  "chaque seconde compte", "le temps presse", "la tension est à son comble", "un frisson le parcourt",
+  "un sourire énigmatique", "le souffle coupé", "comme un château de cartes", "sceller son destin",
+  "plus lourd que jamais", "ses yeux s'écarquillent"
+];
+
 function buildSystemPrompt(input, plan, streaming = false) {
-  const { child, isEnd } = plan;
+  const { child, isEnd, pageNumber, total } = plan;
   const g = GENRES[input.category];
   const age = child ? (AGES.includes(input.age) ? input.age : "6–8 ans") : null;
   const ageGuide = child ? CHILD_AGE_GUIDES[age] : null;
-  const words = child ? ageGuide.words : "250 à 380";
+  const words = child ? ageGuide.words : "280 à 400";
+  const needBible = !String(input.bible || "").trim();
 
   const publicLine = child
     ? `PUBLIC : enfants de ${age}. ${ageGuide.style} Aucune scène effrayante ni violence. Les surprises sont douces : une découverte, un personnage inattendu, un renversement amusant.`
-    : `PUBLIC : adolescents et adultes. Style immersif, précis et sensoriel, dialogues naturels. Évite les clichés du genre : détails concrets et inattendus, personnages aux motivations complexes.`;
+    : `PUBLIC : adolescents et adultes. Style immersif, précis et sensoriel, dialogues naturels.`;
+  const realism = REALISTIC_GENRES.includes(input.category)
+    ? `RÉALISME : genre réaliste. Aucun surnaturel, aucun gadget impossible (pas d'hologramme, de rituel magique, de technologie de science-fiction). Tout doit pouvoir arriver dans le monde réel.\n`
+    : "";
 
   const hero = cleanHero(input.hero);
   const heroLine = hero
-    ? `HÉROS : le lecteur est le héros de l'histoire et il s'appelle ${hero}. Le protagoniste, c'est ${hero} : nomme-le dès la première phrase de la page 1, garde ce prénom du début à la fin, ` +
-      `et fais vivre les choix proposés par lui. Les autres personnages portent d'autres prénoms. Inscris-le en tête de PERSONNAGES dans la mémoire (« ${hero}, le héros »). ` +
-      `Si le genre de « ${hero} » n'est pas évident, évite les accords et pronoms genrés en répétant le prénom ou en tournant autrement la phrase.\n`
+    ? `HÉROS : le lecteur est le héros et il s'appelle ${hero}. Nomme-le dès la première phrase de la page 1 et garde ce prénom jusqu'au bout ; les autres personnages portent d'autres prénoms. ` +
+      `Si le genre de « ${hero} » n'est pas évident, évite les accords et pronoms genrés.\n`
     : "";
+
+  const bibleRules = `BIBLE DE L'HISTOIRE (champ "bible")
+${needBible ? `Tu dois l'écrire MAINTENANT, avant d'écrire la page. C'est le plan secret du roman entier ; elle ne sera plus jamais modifiée.` : `Elle t'est fournie : elle est fixée. Ne la réécris pas, laisse le champ "bible" vide, et suis-la.`}
+Format (1400 caractères maximum, lignes courtes) :
+PRÉMISSE : l'histoire en une phrase
+HÉROS : nom ; ce qu'il veut ; sa blessure intime (un manque, une faute, un deuil, une peur) ; ce qu'il devra comprendre ou accepter à la fin
+PERSONNAGES : 2 ou 3, une ligne chacun : « Nom — rôle unique dans l'histoire — trait / contradiction / veut / cache / façon de parler / passé en une phrase »
+ANTAGONISTE : qui, et son mobile compréhensible (il croit avoir raison)
+SECRET : ${g.secret}
+TRAME : exactement ${total} lignes numérotées « 1. », « 2. »… : pour chaque page, le lieu et l'étape (événement ou révélation). Au moins ${child ? 3 : 5} lieux différents, avec des ellipses de temps ; la blessure du héros est touchée au moins à 3 reprises ; la page ${total} est le dénouement.
+FIN PRÉVUE : comment l'intrigue se résout et ce que le héros a changé en lui
+Les choix du lecteur changent le chemin, les rencontres et le prix payé, pas la direction générale : adapte chaque étape aux choix déjà faits.
+Un nom = un personnage = un rôle, du début à la fin : ne fusionne jamais deux personnages, ne change jamais le rôle de quelqu'un sans que la trame l'ait prévu (trahison préparée).`;
 
   const choiceRules = isEnd
     ? `Cette page est la dernière : "choix" est une liste vide et "fin" vaut true.`
-    : `Propose exactement deux choix. Chacun contient :
-- "texte" : ce que le lecteur voit. Une action concrète en une phrase courte (14 mots maximum) qui commence par un verbe à l'infinitif et vise une cible précise (qui, quoi, où). Ne révèle pas l'issue.
-- "suite" : invisible pour le lecteur. En une ou deux phrases, l'événement concret que ce choix déclenchera au début de la page suivante, et en quoi il fait avancer l'intrigue.
-Cohérence entre le texte et les choix (priorité absolue) :
-- Ancrage : chaque choix doit être faisable par le héros à l'instant exact où la page s'arrête, avec ce que le texte de la page a déjà montré (personnages présents, objets, lieux, informations que le héros connaît). N'introduis dans un choix aucun personnage, objet, lieu ou savoir que le lecteur n'a pas vu dans le texte.
-- Le dernier paragraphe de la page pose clairement la situation de décision, et les deux choix y répondent directement. Nomme les personnes, objets et lieux comme dans le texte, pour que le choix soit compréhensible sans mémoire.
-- Les deux choix s'excluent vraiment : faire l'un empêche de faire l'autre, au moins sur le moment.
-- La "suite" de chaque choix découle de CE QUE DIT le choix (même geste, même cible) et de ce que le héros sait. Elle ne contredit ni le lieu, ni les personnes présentes, ni l'état du héros à la fin de la page.
-Règles impératives :
-- Chaque page indique la SOURCE DU DILEMME et le TYPE D'ACTION de chaque choix : respecte-les. Les deux choix sont deux gestes de nature différente (par exemple parler contre fouiller, protéger quelqu'un contre utiliser un objet), jamais deux variantes d'un même geste (deux portes, deux objets, deux personnes à suivre, dire oui ou non).
-- Ne construis pas la fin de page sur « le héros voit A et B, que prend-il ? ». Le dilemme naît de la situation indiquée, pas d'une liste d'options posée devant lui.
-- Pas de choix manichéen : aucun n'est le « bon » ou le « mauvais ». Chacun a un avantage réel et un prix réel, et chacun fait avancer l'histoire vers une situation NOUVELLE (lieu, personnage, révélation, danger, objet gagné ou perdu, alliance ou rupture).
-- Interdit pour les deux choix : attendre, réfléchir, observer encore, se cacher, faire demi-tour, rentrer, se reposer, demander une explication de plus, ou toute action qui ramène à une situation déjà vécue (voir « déjà vécu » dans la mémoire).
-- Les deux suites sont nettement différentes l'une de l'autre et rapprochent toutes deux l'histoire de son dénouement.
-- Choix typiques de ce genre, à adapter : ${g.choix}.`;
+    : `Exactement deux choix. Chacun contient :
+- "texte" : ce que le lecteur voit. Une action concrète en une phrase courte (14 mots maximum) qui commence par un verbe à l'infinitif et vise une cible précise. Ne révèle pas l'issue.
+- "suite" : invisible pour le lecteur. En une ou deux phrases, ce que ce choix déclenchera au début de la page suivante, cohérent avec la trame.
+Règles :
+- Faisable à l'instant exact où la page s'arrête, avec uniquement les personnages, objets, lieux et informations déjà présents dans le texte. Les noms sont ceux du texte.
+- Les deux choix s'excluent vraiment, sont deux gestes de nature différente (voir TYPES D'ACTION de la page) et ont chacun un avantage et un prix. Jamais deux variantes d'un même geste (deux portes, deux couloirs, deux objets).
+- Interdit : attendre, réfléchir, observer encore, se cacher, faire demi-tour, se reposer, ou revenir à une situation déjà vécue.
+- Ne formule JAMAIS les options dans le texte de la page (« X doit choisir », « soit… soit… », « ou bien… », « deux options ») : la page s'arrête sur la situation, les boutons portent les choix.
+- Choix typiques du genre, à adapter : ${g.choix}.`;
 
-  return `Tu es un romancier français de grand talent qui écrit, page après page, UN SEUL roman interactif continu. ` +
-`Le lecteur vit l'histoire de l'intérieur : ses choix comptent vraiment et l'histoire avance à chaque page.
+  return `Tu es un romancier français de grand talent qui écrit, page après page, UN SEUL roman interactif de ${total} pages. ` +
+`Le lecteur vit l'histoire de l'intérieur : ses choix comptent et l'histoire avance à chaque page.
 
 GENRE : ${input.category}
-TON ET STYLE DU GENRE : ${g.ton}
-NARRATION IMPOSÉE POUR TOUTE L'HISTOIRE : ${g.narration}. Ne change jamais de personne ni de temps d'une page à l'autre.
+TON ET STYLE : ${g.ton}
+NARRATION IMPOSÉE : ${g.narration}. Ne change jamais de personne ni de temps.
 ${publicLine}
-${heroLine}
-CONTINUITÉ (règle la plus importante)
-Chaque page est la suite immédiate de la précédente, comme la page suivante d'un même livre ouvert : même scène, même instant, même tension.
-- La première phrase reprend exactement là où la dernière ligne lue s'arrête et montre déjà l'effet du choix du lecteur. Elle ne doit avoir de sens que pour quelqu'un qui vient de lire la page précédente.
-- Interdit au début d'une page (sauf la page 1) : titre, numéro, « Chapitre », description du temps qu'il fait ou du lever du jour, présentation du décor ou du héros, formules d'ouverture (« Il était une fois », « Ce jour-là », « Le lendemain », « Dans la ville de… »), résumé ou rappel de ce qui précède, reformulation du choix (« Elle décida de… »).
-- Ne saute ni de lieu ni de temps sans raison. Si c'est nécessaire, fais-le après avoir montré l'effet du choix, en une courte phrase de transition.
+${realism}${heroLine}
+${bibleRules}
+
+CONTINUITÉ ET PROGRESSION
+- Page 2 et suivantes : la première phrase reprend là où la dernière ligne lue s'arrête et réalise le choix du lecteur EXACTEMENT comme il est écrit (même geste, même cible ; « fuir » veut dire quitter les lieux). Pas de titre, pas de résumé, pas de formule d'ouverture.
+- Après avoir montré l'effet du choix, fais avancer l'histoire vers l'étape prévue par la TRAME pour cette page. Une ellipse (« Une heure plus tard… », « Le soir même… ») ou un changement de lieu est alors permis et souvent souhaitable : jamais plus de deux pages de suite dans le même lieu.
+- Continuité physique : un objet laissé quelque part y reste ; un personnage qui n'est pas dans la scène n'y apparaît pas sans arrivée racontée ; un personnage absent depuis longtemps revient ou son absence est expliquée. Le héros ne sait que ce qu'il a vu ou appris.
+- Les révélations viennent de la TRAME et des détails semés plus tôt, jamais d'une invention de dernière minute.
+
+ÉMOTION
+- Chaque page contient au moins un moment intérieur ou relationnel : un souvenir lié à la blessure du héros, un regard, un échange vrai avec un autre personnage, un doute. Montre-le par des gestes et des paroles, pas par des étiquettes (« il était triste »).
+- Les autres personnages ont leurs propres désirs : ils agissent, aident, mentent ou souffrent pour leurs raisons, pas seulement pour servir l'intrigue.
 
 ÉCRITURE
-- Longueur : ${words} mots, en paragraphes courts.
-- Faits cohérents : noms, lieux, objets, relations et conséquences des choix passés restent les mêmes.
-- Ne répète jamais une formule, une description ou une situation déjà écrite.
-- Montre, n'explique pas ce que le lecteur doit ressentir.
-- Les surprises doivent sembler logiques après coup. Tant que le secret n'est pas révélé, n'y fais que des allusions ambiguës.
-- Termine la page sur une tension ou une question qui appelle la décision.
-- Quand une page suit un choix du lecteur, elle commence par réaliser ce choix tel qu'il est écrit (même geste, même cible, au même endroit, avec les personnes déjà présentes), puis en montre les conséquences. Aucune téléportation, aucun personnage absent qui surgit sans raison, aucune information que le héros ne peut pas avoir.
-- Avant de rendre la page, vérifie que chaque nom, lieu, objet et fait de ta page est cohérent avec la mémoire et le texte déjà lu, et que tes deux choix respectent les règles de cohérence ci-dessus.
+- ${words} mots, en paragraphes courts.
+- Détails concrets et inattendus plutôt qu'adjectifs : un objet, un geste, une odeur, une phrase de dialogue qui révèle un personnage.
+- Interdit : ces formules usées (et leurs variantes) : ${BANNED_PHRASES.join(" ; ")}.
+- Un motif (compte à rebours, néon, bruit, couleur…) ne revient pas plus d'une page sur trois. Ne répète jamais une phrase ou une description déjà écrite.
+- Évite les prénoms trop fréquents dans les histoires générées (Elara, Lysandre, Kael, Mara, Elias, Aria, Luna, Léo, Aurelia, Eldoria, Thorn, Zephyr, Willow).
 
-PERSONNAGES
-Le héros et les 2 ou 3 autres personnages principaux ont chacun une vraie personnalité propre, originale, qui se voit dans leurs actes et leurs paroles, jamais dans une description plate :
-- un trait marquant, une contradiction, ce qu'il veut, ce qu'il cache, sa façon de parler (rythme, mots, tics), et son passé en une phrase qui explique pourquoi il est ainsi aujourd'hui.
-- Invente ces fiches à la page 1 et fais agir chaque personnage selon sa fiche. Un personnage peut surprendre, mais jamais en contradiction avec son passé.
-- Évite les prénoms et noms trop fréquents dans les histoires générées (Elara, Lysandre, Kael, Mara, Elias, Aria, Luna, Léo, Aurelia, Eldoria, Auroria, Thorn, Zephyr, Willow). Choisis des noms variés, concrets, propres au lieu et à l'époque.
-- Les personnages secondaires restent simples, un trait suffit.
-
-${authorsInstruction(input)}RYTHME ET REBONDISSEMENTS
-Chaque page reçoit une INTENSITÉ DU REBONDISSEMENT : respecte-la exactement. Une page calme n'a pas de twist ; un petit imprévu reste discret ; ne transforme pas toutes les pages en coups de théâtre. Le suspense vient aussi de ce qui reste non dit, d'une menace sourde, d'un mot de trop.
+${authorsInstruction(input)}RYTHME
+Chaque page reçoit une INTENSITÉ DU REBONDISSEMENT : respecte-la. Une page calme n'a aucun twist ; un petit imprévu reste discret. Le suspense vient aussi du non-dit et d'une menace sourde.
 
 CHOIX
 ${choiceRules}
 
-MÉMOIRE (champ "memoire", 900 caractères maximum, style télégraphique, réécrite entièrement à chaque page)
-Lignes courtes, dans cet ordre :
-OBJECTIF : ce que veut le héros / ce qui l'en empêche
-PERSONNAGES : une fiche par personnage principal, 2 à 3 mots par rubrique : « Nom : trait / contradiction / veut / cache / parle / passé ». Secondaires : nom + un mot.
-LIEUX ET OBJETS : quelques mots
-DÉJÀ VÉCU : 3 à 5 mots par page
+MÉMOIRE (champ "memoire", 800 caractères maximum, style télégraphique, réécrite à chaque page)
+DÉJÀ VÉCU : 3 à 6 mots par page (lieu + fait)
+OBJETS : qui possède quoi, où sont les objets importants
+RELATIONS : comment chaque personnage principal voit le héros maintenant
 FILS OUVERTS : quelques mots
-(ne mets pas de ligne ÉTAT : elle est ajoutée automatiquement)
-ÉCARTÉ : choix non pris dont l'effet pèse encore sur l'histoire (quelques mots ; rien s'il n'en reste aucun)
-SECRET : ${g.secret} (décidé dès la page 1, jamais modifié, révélé seulement au dénouement)
+ÉCARTÉ : choix non pris dont l'effet pèse encore (rien s'il n'en reste aucun)
+(ne recopie ni la bible ni la ligne ÉTAT)
 
 TITRE
-Champ "titre" obligatoire : 2 à 6 mots, évocateur, sans guillemets, cohérent avec l'histoire (il peut évoluer ; à la dernière page, il reflète la conclusion).
+Champ "titre" : 2 à 6 mots, évocateur, sans guillemets.
 
 ${streaming ? streamFormat(isEnd) : `FORMAT DE RÉPONSE
-Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est découpé en paragraphes dans une liste : n'écris jamais « \\n » ni « /n » dans les textes.
-Commence par "plan" : 15 mots maximum, que le lecteur ne verra pas, qui dit comment tu appliques la recette de la page (rebondissement, dilemme, deux types d'action).
-Place "etat" juste après "paragraphes" et avant "choix" : 30 mots maximum, écrits à partir de ta dernière ligne, qui disent où est exactement le héros, qui est présent, ce qu'il tient et ce qu'il sait à la fin de la page. Tes deux choix doivent découler de cet état.
-{"plan":"…","paragraphes":["premier paragraphe","deuxième paragraphe"],"etat":"…","choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`}`;
+Réponds uniquement avec un objet JSON valide, sans texte autour. Le texte de la page est une liste de paragraphes : n'écris jamais « \\n » ni « /n » dans les textes.
+"plan" : 15 mots maximum, invisible : comment cette page réalise son étape de la trame.
+"etat" (après "paragraphes", avant "choix") : 35 mots maximum : où est le héros, qui est présent, où sont les autres personnages principaux, ce que le héros porte et ce qu'il sait à la fin de la page. Les choix découlent de cet état.
+{${needBible ? `"bible":"…",` : `"bible":"",`}"plan":"…","paragraphes":["…","…"],"etat":"…","choix":[{"texte":"…","suite":"…"},{"texte":"…","suite":"…"}],"memoire":"…","titre":"…","fin":${isEnd}}`}`;
 }
 
 // Format pour l'écriture en direct : le texte de la page d'abord (il s'affiche pendant qu'il s'écrit),
@@ -546,7 +559,12 @@ function streamFormat(isEnd) {
 function buildUserPrompt(input, plan, maxPages = 2) {
   const { total, pageNumber, isEnd } = plan;
   const g = GENRES[input.category];
-  const memo = String(input.memo || "").slice(0, 1450);
+  const memo = String(input.memo || "").slice(0, 1200);
+  const bible = String(input.bible || "").slice(0, 1600);
+  const stepLine = (bible.match(new RegExp(`^\\s*${pageNumber}\\s*[.)\\-:]\\s*(.+)$`, "m")) || [])[1] || "";
+  const bibleBlock = bible
+    ? `BIBLE DE L'HISTOIRE (fixée, à suivre, ne pas réécrire) :\n${bible}\n\nÉTAPE PRÉVUE PAR LA TRAME POUR CETTE PAGE : ${stepLine || "voir la trame"}${pageNumber > 1 ? " (adapte-la à ce que le lecteur a choisi)" : ""}\n\n`
+    : "";
   const seed = String(input.seed || "").slice(0, 500);
   const selectedChoice = input.selectedChoice ? String(input.selectedChoice).slice(0, 300) : "";
   const selectedDirection = input.selectedDirection ? String(input.selectedDirection).slice(0, 500) : "";
@@ -565,7 +583,7 @@ function buildUserPrompt(input, plan, maxPages = 2) {
   if (!pages.length) {
     return `${state}
 
-IDÉE DE DÉPART DU LECTEUR : ${seed || "libre : invente un point de départ original et précis, propre au genre."}
+${bibleBlock}IDÉE DE DÉPART DU LECTEUR : ${seed || "libre : invente un point de départ original et précis, propre au genre."}
 
 Écris maintenant la page 1.`;
   }
@@ -585,7 +603,7 @@ IDÉE DE DÉPART DU LECTEUR : ${seed || "libre : invente un point de départ ori
 
   return `${state}
 
-MÉMOIRE DU RÉCIT :
+${bibleBlock}${bible ? "" : "ATTENTION : cette histoire n'a pas encore de bible. Écris-la dans le champ \"bible\" en partant de ce qui a déjà été lu, avec une trame pour toutes les pages, puis écris la page.\n\n"}MÉMOIRE DU RÉCIT :
 ${memo || "(vide)"}
 
 TEXTE DÉJÀ LU PAR LE LECTEUR${skipped > 0 ? ` (les ${skipped} premières pages sont résumées dans la mémoire)` : ""} :
@@ -674,7 +692,27 @@ function coherenceIssue(result, input) {
   }
   if (missing.length) return `les choix citent « ${[...new Set(missing)].join(", ")} », absent du récit. Réécris les deux choix en n'utilisant que des personnages, objets et lieux présents dans ta page.`;
   if (stripAccents(result.choices[0]) === stripAccents(result.choices[1])) return "les deux choix sont identiques. Écris deux choix différents.";
+  const tail = stripAccents(String(result.page).slice(-500));
+  if (/doit (maintenant )?choisir|deux options|deux possibilites|soit .{3,80}, soit /.test(tail)) return "le texte de la page énonce les options (« doit choisir », « soit… soit… »). Réécris la fin de la page pour qu'elle s'arrête sur la situation, sans lister les options.";
+  if (!String(input.bible || "").trim() && !result.bible) return "le champ \"bible\" est vide. Écris la bible complète (prémisse, héros, personnages, antagoniste, secret, trame numérotée, fin prévue).";
   return "";
+}
+
+// La bible peut arriver en texte ou en objet JSON : on la ramène à un texte en lignes.
+function bibleText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return cleanStoryText(value).trim().slice(0, 1600);
+  if (typeof value !== "object") return "";
+  const lines = [];
+  for (const [key, val] of Object.entries(value)) {
+    if (Array.isArray(val)) {
+      lines.push(`${key.toUpperCase()} :`);
+      val.forEach((item, i) => lines.push(typeof item === "object" ? `${i + 1}. ${Object.values(item).join(" — ")}` : (/^\s*\d+[.)]/.test(String(item)) ? String(item) : `${i + 1}. ${item}`)));
+    } else if (val && typeof val === "object") {
+      lines.push(`${key.toUpperCase()} : ${Object.entries(val).map(([k, v]) => `${k} : ${v}`).join(" ; ")}`);
+    } else lines.push(`${key.toUpperCase()} : ${val}`);
+  }
+  return cleanStoryText(lines.join("\n")).slice(0, 1600);
 }
 
 function parseOutput(raw, isEnd) {
@@ -695,7 +733,7 @@ function parseOutput(raw, isEnd) {
   const etat = typeof value.etat === "string" ? cleanStoryText(value.etat).replace(/\s+/g, " ").trim().slice(0, 300) : "";
   // La ligne ÉTAT (où est le héros, qui est là, ce qu'il tient) est placée en tête de la mémoire, remplaçant la précédente.
   const body = (typeof value.memoire === "string" ? cleanStoryText(value.memoire) : "")
-    .split("\n").filter(l => !/^\s*ÉTAT\s*:/i.test(l)).join("\n").slice(0, 1100);
+    .split("\n").filter(l => !/^\s*ÉTAT\s*:/i.test(l)).join("\n").slice(0, 900);
   const memoire = etat ? `ÉTAT : ${etat}\n${body}` : body;
   if (!page) throw new Error("La page générée est vide.");
   if (!isEnd && choices.length !== 2) throw new Error("La réponse ne contient pas exactement deux choix.");
@@ -705,6 +743,7 @@ function parseOutput(raw, isEnd) {
     directions: isEnd ? [] : choices.map(c => c.suite),
     memoire,
     titre,
+    bible: bibleText(value.bible),
     plan: typeof value.plan === "string" ? cleanStoryText(value.plan).replace(/\s+/g, " ").slice(0, 400) : ""
   };
 }
@@ -832,7 +871,7 @@ async function callGroq(env, model, prompts, isEnd) {
       ],
       temperature: 0.8,
       // Les modèles de raisonnement consomment ces tokens : la marge évite une réponse tronquée.
-      max_tokens: 2400,
+      max_tokens: 3000,
       ...groqParams(model),
       response_format: { type: "json_object" }
     })
@@ -1096,7 +1135,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true) {
       body: JSON.stringify({
         model: engine.model,
         messages: [{ role: "system", content: prompts.system }, { role: "user", content: prompts.user }],
-        temperature: 0.8, max_tokens: 2400, ...groqParams(engine.model), stream: true
+        temperature: 0.8, max_tokens: 3000, ...groqParams(engine.model), stream: true
       })
     });
     if (!response.ok) throw await httpError("Groq", response);

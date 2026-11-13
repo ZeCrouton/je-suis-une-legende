@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -114,6 +114,8 @@ async function generate(choiceIndex = null) {
     history: currentStory.pages.slice(-3).map(p => ({ page: p.page, choice: p.choice })),
     pageNumber: currentStory.pages.length + 1,
     memo: currentStory.memo || "",
+    // Plan secret de toute l'histoire, écrit à la page 1 et renvoyé tel quel à chaque page.
+    bible: currentStory.bible || "",
     selectedChoice,
     // Conséquence prévue par l'IA pour ce choix : la page suivante doit la réaliser.
     selectedDirection,
@@ -137,6 +139,7 @@ async function generate(choiceIndex = null) {
       directions: Array.isArray(data.directions) ? data.directions : [],
       choice: selectedChoice || "Début"
     });
+    if (data.bible && !currentStory.bible) currentStory.bible = data.bible;
     currentStory.memo = data.memoire || currentStory.memo || "";
     currentStory.title = data.titre || currentStory.title || "";
     currentStory.totalPages = data.totalPages || currentStory.totalPages;
