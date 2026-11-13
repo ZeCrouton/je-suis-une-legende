@@ -22,7 +22,7 @@ const STATE_KEY = "recitsChoixCurrent";
 function saveState(view){
   try {
     if (!currentStory || !currentStory.pages.length) return;
-    localStorage.setItem(STATE_KEY, JSON.stringify({ story: currentStory, view, index: displayedIndex }));
+    localStorage.setItem(STATE_KEY, JSON.stringify({ story: currentStory, view, index: displayedIndex, from: fullFrom }));
     // Si l'histoire est déjà dans la bibliothèque, sa copie est mise à jour aussi.
     const items = loadLibrary();
     const i = items.findIndex(x => x.id === currentStory.id);
@@ -42,7 +42,7 @@ function placeNotes(view){
 }
 function show(view){
   if (typeof stopReading === "function") stopReading();
-  ["homeView","readerView","libraryView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));
+  ["homeView","readerView","fullView","libraryView"].forEach(id=>$(id).classList.toggle("hidden",id!==view));
   placeNotes(view);
   window.scrollTo({top:0,behavior:"smooth"});
   saveState(view);
@@ -99,6 +99,8 @@ async function generate(choiceIndex = null) {
     category: currentStory.category,
     age: currentStory.age,
     seed: currentStory.seed,
+    // Identifiant de l'histoire : le serveur en tire le rythme (pages calmes, rebondissements, types de choix).
+    storyId: currentStory.id,
     hero: currentStory.hero || "",
     // Seules les 3 dernières pages sont envoyées ; la mémoire couvre le reste de l'histoire.
     history: currentStory.pages.slice(-3).map(p => ({ page: p.page, choice: p.choice })),
@@ -283,6 +285,65 @@ if (!canSpeak) $("readBtn").classList.add("hidden");
 
 
 let displayedIndex = null; // page actuellement affichée (null = aucune)
+let fullFrom = "readerView"; // d'où l'on a ouvert la lecture complète
+
+// Notation de 1 à 5 étoiles, propre à l'appareil, enregistrée avec l'histoire.
+function starsHTML(rating, interactive){
+  const r = Number(rating) || 0;
+  const stars = [1,2,3,4,5].map(n => interactive
+    ? `<button type="button" class="star${n <= r ? " on" : ""}" data-star="${n}" aria-label="${n} étoile${n > 1 ? "s" : ""}">★</button>`
+    : `<span class="star${n <= r ? " on" : ""}">★</span>`).join("");
+  return `<div class="stars${interactive ? "" : " static"}" role="img" aria-label="${r ? `Note : ${r} sur 5` : "Pas de note"}">${stars}</div>`;
+}
+function ratingBlockHTML(){
+  return `<p class="rating-title">${currentStory.rating ? "Votre note" : "Notez cette histoire"}</p>${starsHTML(currentStory.rating, true)}`;
+}
+function currentView(){
+  return ["homeView","readerView","fullView","libraryView"].find(id => !$(id).classList.contains("hidden")) || "homeView";
+}
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-star]");
+  if (!btn || !currentStory) return;
+  currentStory.rating = Number(btn.dataset.star);
+  document.querySelectorAll(".rating-block").forEach(el => { el.innerHTML = ratingBlockHTML(); });
+  saveState(currentView());
+});
+
+function saveCurrentStory(){
+  if (!currentStory || !currentStory.pages.length) return;
+  const items = loadLibrary(); const index = items.findIndex(x => x.id === currentStory.id);
+  if (index >= 0) items[index] = currentStory; else items.unshift(currentStory);
+  saveLibrary(items);
+  $("saveBtn").textContent = "♥ Enregistré";
+}
+
+// Lecture continue de toute l'histoire, avec les choix faits entre les pages.
+function renderFull(from){
+  stopReading();
+  fullFrom = from || fullFrom;
+  const s = currentStory;
+  const pages = s.pages;
+  displayedIndex = pages.length - 1;
+  $("fullTag").textContent = s.category;
+  $("fullCount").textContent = `${pages.length} page${pages.length > 1 ? "s" : ""}`;
+  $("fullTitle").textContent = cleanText(s.title || "") || "Une aventure";
+  $("fullText").innerHTML = pages.map((p, i) => {
+    const next = pages[i + 1];
+    const chosen = next && next.choice && next.choice !== "Début"
+      ? `<p class="full-choice">Vous avez choisi : « ${escapeHtml(cleanText(next.choice))} »</p>` : "";
+    return `<div class="full-page"><p class="page-mark">Page ${i + 1}</p>${paragraphs(p.page)}${chosen}</div>`;
+  }).join("");
+  $("fullFooter").textContent = s.finished ? "Fin" : "À suivre…";
+  $("fullRating").innerHTML = s.finished ? ratingBlockHTML() : "";
+  const saved = loadLibrary().some(x => x.id === s.id);
+  $("fullActions").innerHTML =
+    (s.finished ? "" : `<button id="fullResume" class="primary" type="button">Reprendre l'histoire</button>`) +
+    (saved ? "" : `<button id="fullSave" class="ghost" type="button">♡ Enregistrer dans ma bibliothèque</button>`);
+  if ($("fullResume")) $("fullResume").addEventListener("click", () => renderStory());
+  if ($("fullSave")) $("fullSave").addEventListener("click", () => { saveCurrentStory(); $("fullSave").remove(); });
+  show("fullView");
+}
+$("fullBack").addEventListener("click", () => { fullFrom === "libraryView" ? renderLibrary() : renderStory(); });
 
 // Affiche la page la plus récente, ou une page précédente en relecture (atIndex).
 function renderStory(atIndex){
@@ -307,12 +368,15 @@ function renderStory(atIndex){
     const ended = page.choices.length === 0;
     heading.classList.toggle("hidden", ended);
     $("choices").innerHTML = ended
-      ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>`
+      ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>` +
+        `<div class="rating-block">${ratingBlockHTML()}</div>` +
+        `<div class="end-actions"><button id="fullBtn" class="primary" type="button">📖 Relire l'histoire en entier</button></div>`
       : page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(cleanText(choice))}</button>`).join("");
     document.querySelectorAll(".choice").forEach((btn,i)=>{
       btn.disabled = generating;
       btn.addEventListener("click",()=>generate(i));
     });
+    if ($("fullBtn")) $("fullBtn").addEventListener("click", () => renderFull("readerView"));
   } else {
     // En relecture : le choix déjà fait est affiché, mais ne peut plus être modifié.
     heading.classList.add("hidden");
@@ -377,12 +441,7 @@ $("startBtn").addEventListener("click",async()=>{
   // Première page impossible à générer : on retrouve l'histoire précédente, rien n'est perdu.
   if (!currentStory.pages.length) { currentStory = previousStory; displayedIndex = previousIndex; updateResume(); }
 });
-$("saveBtn").addEventListener("click",()=>{
-  if(!currentStory||!currentStory.pages.length)return;
-  const items=loadLibrary(); const index=items.findIndex(x=>x.id===currentStory.id);
-  if(index>=0)items[index]=currentStory;else items.unshift(currentStory);
-  saveLibrary(items); $("saveBtn").textContent="♥ Enregistré";
-});
+$("saveBtn").addEventListener("click", saveCurrentStory);
 // Navigation de relecture : on peut relire toutes les pages précédentes,
 // mais les choix déjà faits restent verrouillés.
 function updateNav(){
@@ -405,12 +464,13 @@ $("libraryBtn").addEventListener("click",renderLibrary);
 $("libraryBack").addEventListener("click",()=>show("homeView"));
 function renderLibrary(){
   const items=loadLibrary();
-  $("libraryList").innerHTML=items.length?items.map(s=>`<article class="library-item"><div><h3>${escapeHtml(s.title||"Une aventure")}</h3><p>${escapeHtml(s.category)} · ${s.pages.length} page(s)${s.finished ? " · terminée" : ""}</p></div><div><button class="ghost" data-open="${s.id}">Reprendre</button> <button class="ghost" data-delete="${s.id}" aria-label="Supprimer">×</button></div></article>`).join(""):`<div class="empty">Votre bibliothèque est encore vide.<br>Enregistrez une histoire pour la retrouver ici.</div>`;
+  $("libraryList").innerHTML=items.length?items.map(s=>`<article class="library-item"><div><h3>${escapeHtml(s.title||"Une aventure")}</h3><div class="library-meta"><p>${escapeHtml(s.category)} · ${s.pages.length} page(s)${s.finished ? " · terminée" : " · en cours"}</p>${s.rating ? starsHTML(s.rating, false) : ""}</div></div><div><button class="ghost" data-open="${s.id}">${s.finished ? "Lire" : "Reprendre"}</button> <button class="ghost" data-delete="${s.id}" aria-label="Supprimer">×</button></div></article>`).join(""):`<div class="empty">Votre bibliothèque est encore vide.<br>Enregistrez une histoire pour la retrouver ici.</div>`;
   document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{
     currentStory=loadLibrary().find(x=>x.id===b.dataset.open);
     displayedIndex=null;
     $("saveBtn").textContent="♥ Enregistré";
-    renderStory();
+    // Une histoire terminée s'ouvre en entier ; une histoire en cours reprend à sa dernière page.
+    if (currentStory.finished) renderFull("libraryView"); else renderStory();
   }));
   document.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>{saveLibrary(loadLibrary().filter(x=>x.id!==b.dataset.delete));renderLibrary()}));
   show("libraryView");
@@ -426,6 +486,7 @@ function restoreState(){
     const n = currentStory.pages.length;
     const idx = Number.isInteger(st.index) && st.index >= 0 && st.index < n ? st.index : undefined;
     if (st.view === "readerView") renderStory(idx);
+    else if (st.view === "fullView") renderFull(st.from === "libraryView" ? "libraryView" : "readerView");
     else if (st.view === "libraryView") { displayedIndex = idx ?? n - 1; renderLibrary(); }
     else { displayedIndex = idx ?? n - 1; updateResume(); }
   } catch {}
