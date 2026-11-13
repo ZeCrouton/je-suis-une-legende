@@ -813,11 +813,23 @@ function geminiRank(name) {
   return [fast, -version, lite, preview, name.length];
 }
 
+// Retourne la liste des clés Gemini disponibles (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3…)
+function geminiKeys(env) {
+  const keys = [];
+  if (env.GEMINI_API_KEY) keys.push(env.GEMINI_API_KEY);
+  if (env.GEMINI_API_KEY_2) keys.push(env.GEMINI_API_KEY_2);
+  if (env.GEMINI_API_KEY_3) keys.push(env.GEMINI_API_KEY_3);
+  return keys;
+}
+
 async function geminiModels(env) {
   if (modelCache.gemini && Date.now() - modelCache.gemini.at < MODEL_LIST_TTL_MS) return modelCache.gemini.list;
+  // On utilise la première clé pour lister les modèles (la liste est identique pour tous les comptes).
+  const key = geminiKeys(env)[0];
+  if (!key) return GEMINI_DEFAULTS;
   let list = GEMINI_DEFAULTS;
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${env.GEMINI_API_KEY}`);
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${key}`);
     if (r.ok) {
       const names = ((await r.json()).models || [])
         .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
@@ -883,13 +895,14 @@ async function callGroq(env, model, prompts, isEnd) {
   return { ...parseOutput(data.choices?.[0]?.message?.content || "", isEnd), usage: data.usage || null };
 }
 
-async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true, signal) {
+async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true, signal, apiKey) {
+  apiKey = apiKey || env.GEMINI_API_KEY;
   const generationConfig = { responseMimeType: "application/json", temperature: 0.8, maxOutputTokens: 3500 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "minimal" };
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: "POST",
     signal,
@@ -902,7 +915,7 @@ async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true,
   });
   if (!response.ok) {
     // Si ce modèle refuse le réglage de réflexion, on réessaie une fois sans.
-    if (response.status === 400 && withThinkingConfig) return callGemini(env, model, prompts, isEnd, false, signal);
+    if (response.status === 400 && withThinkingConfig) return callGemini(env, model, prompts, isEnd, false, signal, apiKey);
     throw await httpError("Gemini", response);
   }
   const data = await response.json();
@@ -938,8 +951,16 @@ const GEMINI_WAIT_MS = 8000;
 // Liste ordonnée des moteurs à essayer pour cette requête.
 async function engineChain(env) {
   const chain = [];
-  // Gemini en premier (le modèle le plus rapide), puis Qwen (Groq), puis le reste de Groq en secours.
-  if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
+  // Gemini en premier : pour chaque modèle, on tente toutes les clés disponibles avant de passer
+  // au modèle suivant. Chaque paire (modèle × clé) est bloquée indépendamment sur quota.
+  const gKeys = geminiKeys(env);
+  if (gKeys.length) {
+    for (const model of await geminiModels(env)) {
+      for (let ki = 0; ki < gKeys.length; ki++) {
+        chain.push({ provider: "Gemini", model, geminiKey: gKeys[ki], geminiKeyIndex: ki + 1 });
+      }
+    }
+  }
   if (env.GROQ_API_KEY) {
     const groq = await groqModels(env);
     const qwen = groq.filter(model => /^qwen\//.test(model));
@@ -949,10 +970,18 @@ async function engineChain(env) {
   return chain;
 }
 
+// Clé unique pour la Map `exhausted` : distingue chaque paire (provider:model) et, pour Gemini,
+// chaque clé API (geminiKeyIndex = 1, 2, 3…).
+function engineKey(engine) {
+  return engine.provider === "Gemini"
+    ? `Gemini:${engine.geminiKeyIndex}:${engine.model}`
+    : `${engine.provider}:${engine.model}`;
+}
+
 function callEngine(env, engine, prompts, isEnd, signal) {
   return engine.provider === "Groq"
     ? callGroq(env, engine.model, prompts, isEnd)
-    : callGemini(env, engine.model, prompts, isEnd, true, signal);
+    : callGemini(env, engine.model, prompts, isEnd, true, signal, engine.geminiKey);
 }
 
 function shortModel(model) {
@@ -972,7 +1001,7 @@ async function generateWithFallback(env, input, plan) {
   let geminiSlow = false;   // Gemini n'a pas répondu dans le délai : on passe directement à Groq
 
   const tryEngine = async engine => {
-    const key = `${engine.provider}:${engine.model}`;
+    const key = engineKey(engine);
     let maxPages = 2, correction = "", kept = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -1023,7 +1052,7 @@ async function generateWithFallback(env, input, plan) {
 
   for (const engine of chain) {
     if (engine.provider === "Gemini" && geminiSlow) continue;
-    if (isExhausted(`${engine.provider}:${engine.model}`)) {
+    if (isExhausted(engineKey(engine))) {
       errors.push(`${engine.provider} ${engine.model}: quota en pause`);
       continue;
     }
@@ -1035,7 +1064,7 @@ async function generateWithFallback(env, input, plan) {
   const soonest = quotaWaits.sort((a, b) => a.wait - b.wait)[0];
   if (soonest && soonest.wait <= 12) {
     await sleep(soonest.wait + 0.3);
-    exhausted.delete(`${soonest.engine.provider}:${soonest.engine.model}`);
+    exhausted.delete(engineKey(soonest.engine));
     const result = await tryEngine(soonest.engine);
     if (result) return { result };
   }
@@ -1182,7 +1211,7 @@ async function openStream(env, engine, prompts, withThinkingConfig = true, signa
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(engine.model) ? { thinkingBudget: 0 } : { thinkingLevel: "minimal" };
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${engine.model}:streamGenerateContent?alt=sse&key=${env.GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${engine.model}:streamGenerateContent?alt=sse&key=${engine.geminiKey || env.GEMINI_API_KEY}`;
   const response = await fetch(url, {
     method: "POST",
     signal,
@@ -1218,7 +1247,7 @@ function streamStory(env, input, plan, meta) {
     const errors = [];
     let geminiSlow = false;   // Gemini n'a pas commencé dans le délai : on passe à Qwen, puis Groq
     for (const engine of chain) {
-      const key = `${engine.provider}:${engine.model}`;
+      const key = engineKey(engine);
       if (isExhausted(key)) continue;
       if (engine.provider === "Gemini" && geminiSlow) continue;
       // Qwen ne diffuse pas correctement en flux : on le demande en une fois (rapide), puis on envoie la page d'un bloc.
