@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.8";
+const APP_VERSION = "1.9";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -96,7 +96,13 @@ async function generate(choiceIndex = null) {
   // Le bouton cliqué affiche un message d'attente à la place de son texte, le temps de la génération.
   const clicked = choiceIndex === null ? $("startBtn") : document.querySelectorAll(".choice")[choiceIndex];
   const originalHTML = clicked ? clicked.innerHTML : "";
-  if (clicked) { clicked.textContent = "L'auteur fait glisser sa plume…"; clicked.classList.add("is-loading"); }
+  if (clicked) {
+    // Barre de progression en fond : elle se remplit lentement pour faire patienter (sans jamais atteindre 100 %).
+    clicked.innerHTML = '<span class="wait-text">L\'auteur fait glisser sa plume…</span><span class="wait-bar" aria-hidden="true"></span>';
+    clicked.classList.add("is-loading");
+    const bar = clicked.querySelector(".wait-bar");
+    requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = "92%"; }));
+  }
   const restoreButton = () => {
     if (!clicked) return;
     clicked.innerHTML = originalHTML;

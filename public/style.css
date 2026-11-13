@@ -34,6 +34,9 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .is-loading{cursor:wait;animation:pen-pulse 1.5s ease-in-out infinite}
 .primary.is-loading:disabled,.choice.is-loading:disabled{opacity:1}
 .choice.is-loading{border-color:var(--gold);background:rgba(201,169,110,.16);font-style:italic}
+.is-loading{position:relative;overflow:hidden}
+.wait-text{position:relative;z-index:1}
+.wait-bar{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(201,169,110,.22);transition:width 45s cubic-bezier(.15,.55,.3,1);pointer-events:none}
 @keyframes pen-pulse{0%,100%{opacity:1}50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){.is-loading{animation:none}}
 .locked-choice{text-align:center;color:#e0bf78;font-style:italic;line-height:1.6}
