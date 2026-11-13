@@ -58,3 +58,5 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .quill{display:inline-block;margin-left:4px;font-size:.95em;animation:quill-write .6s ease-in-out infinite alternate;transform-origin:20% 90%}
 @keyframes quill-write{from{transform:rotate(-8deg) translateY(0)}to{transform:rotate(6deg) translateY(-2px)}}
 @media (prefers-reduced-motion:reduce){.quill{animation:none}}
+
+.version-line{margin-top:8px;font-size:10px;opacity:.6;letter-spacing:.04em}
