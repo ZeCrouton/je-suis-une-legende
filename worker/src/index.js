@@ -934,9 +934,14 @@ const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 10
 // Liste ordonnée des moteurs à essayer pour cette requête.
 async function engineChain(env) {
   const chain = [];
-  // Gemini en premier (le modèle le plus rapide), Groq en secours.
+  // Gemini en premier (le modèle le plus rapide), puis Qwen (Groq), puis le reste de Groq en secours.
   if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
-  if (env.GROQ_API_KEY) (await groqModels(env)).forEach(model => chain.push({ provider: "Groq", model }));
+  if (env.GROQ_API_KEY) {
+    const groq = await groqModels(env);
+    const qwen = groq.filter(model => /^qwen\//.test(model));
+    const rest = groq.filter(model => !qwen.includes(model));
+    [...qwen, ...rest].forEach(model => chain.push({ provider: "Groq", model }));
+  }
   return chain;
 }
 
