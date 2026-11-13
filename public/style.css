@@ -60,3 +60,27 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 @media (prefers-reduced-motion:reduce){.quill{animation:none}}
 
 .version-line{margin-top:8px;font-size:10px;opacity:.6;letter-spacing:.04em}
+
+.print-only{display:none}
+.pdf-option{display:flex;align-items:center;gap:8px;color:var(--cream);opacity:.85;font:13px Arial,sans-serif;cursor:pointer}
+.pdf-option input{accent-color:var(--gold)}
+@media print{
+  @page{size:A4;margin:2.2cm 2cm}
+  html,body{background:#fff!important;color:#000!important;min-height:0}
+  .topbar,footer,.reader-head,#fullActions,#fullRating,.rating-block,#homeView,#readerView,#libraryView,.story-footer,.story-kicker{display:none!important}
+  .shell{padding:0!important;max-width:none!important;width:auto!important}
+  #fullView{display:block!important}
+  .story-card.full-card{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;margin:0!important;color:#000!important}
+  #fullTitle{font:700 28pt/1.2 Georgia,"Times New Roman",serif;text-align:center;color:#000!important;margin:8cm 0 .4cm}
+  #fullTitle::after{content:"";display:block;width:3cm;height:1px;background:#000;margin:.6cm auto 0}
+  .print-sub{text-align:center;font:italic 12pt Georgia,serif;color:#333!important;margin:.4cm 0 0}
+  #fullText{color:#000!important;font:11.5pt/1.65 Georgia,"Times New Roman",serif;text-align:justify;hyphens:auto}
+  #fullText p{margin:0 0 .55em;orphans:3;widows:3}
+  .screen-only{display:none!important}
+  .print-only{display:inline!important}
+  .full-page{break-inside:auto}
+  .page-mark{break-after:avoid;margin:1.2cm 0 .5cm!important;color:#000!important;opacity:1!important;text-align:center;font:700 12pt Georgia,serif;letter-spacing:.2em;text-transform:uppercase}
+  .full-page:first-child .page-mark{break-before:page;margin-top:0!important}
+  .full-choice{break-inside:avoid;background:none!important;border-left:1.5px solid #000!important;color:#222!important;font-style:italic;margin:.6cm 0 !important;padding:.1cm .4cm!important}
+  body.print-no-choices .full-choice{display:none!important}
+}

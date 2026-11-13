@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.4";
+const APP_VERSION = "1.5";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -434,6 +434,17 @@ function saveCurrentStory(){
   $("saveBtn").textContent = "♥ Enregistré";
 }
 
+// Export PDF : on ouvre la boîte d'impression du navigateur (« Enregistrer au format PDF »).
+// Une feuille de style d'impression ne garde que le roman, sur fond blanc. Le nom du fichier est le titre de l'histoire.
+function exportPdf(){
+  const previous = document.title;
+  const title = cleanText(currentStory?.title || "") || "Mon histoire";
+  document.title = title;
+  const restore = () => { document.title = previous; window.removeEventListener("afterprint", restore); };
+  window.addEventListener("afterprint", restore);
+  setTimeout(() => { window.print(); setTimeout(restore, 1500); }, 150);
+}
+
 // Lecture continue de toute l'histoire, avec les choix faits entre les pages.
 function renderFull(from){
   stopReading();
@@ -444,18 +455,24 @@ function renderFull(from){
   $("fullTag").textContent = s.category;
   $("fullCount").textContent = `${pages.length} page${pages.length > 1 ? "s" : ""}`;
   $("fullTitle").textContent = cleanText(s.title || "") || "Une aventure";
+  $("fullSub").textContent = `Roman interactif · ${s.category}${s.hero ? " · avec " + s.hero + " dans le rôle du héros" : ""}`;
   $("fullText").innerHTML = pages.map((p, i) => {
     const next = pages[i + 1];
     const chosen = next && next.choice && next.choice !== "Début"
       ? `<p class="full-choice">Vous avez choisi : « ${escapeHtml(cleanText(next.choice))} »</p>` : "";
-    return `<div class="full-page"><p class="page-mark">Page ${i + 1}</p>${paragraphs(p.page)}${chosen}</div>`;
+    return `<div class="full-page"><p class="page-mark"><span class="screen-only">Page ${i + 1}</span><span class="print-only">Chapitre ${i + 1}</span></p>${paragraphs(p.page)}${chosen}</div>`;
   }).join("");
   $("fullFooter").textContent = s.finished ? "Fin" : "À suivre…";
   $("fullRating").innerHTML = s.finished ? ratingBlockHTML() : "";
   const saved = loadLibrary().some(x => x.id === s.id);
   $("fullActions").innerHTML =
+    (s.finished ? `<button id="fullPdf" class="primary" type="button">📄 Exporter en PDF</button>` +
+      `<label class="pdf-option"><input type="checkbox" id="pdfChoices" checked> Inclure mes choix dans le PDF</label>` : "") +
     (s.finished ? "" : `<button id="fullResume" class="primary" type="button">Reprendre l'histoire</button>`) +
     (saved ? "" : `<button id="fullSave" class="ghost" type="button">♡ Enregistrer dans ma bibliothèque</button>`);
+  if ($("fullPdf")) $("fullPdf").addEventListener("click", exportPdf);
+  if ($("pdfChoices")) $("pdfChoices").addEventListener("change", e => document.body.classList.toggle("print-no-choices", !e.target.checked));
+  document.body.classList.remove("print-no-choices");
   if ($("fullResume")) $("fullResume").addEventListener("click", () => renderStory());
   if ($("fullSave")) $("fullSave").addEventListener("click", () => { saveCurrentStory(); $("fullSave").remove(); });
   show("fullView");
@@ -487,13 +504,14 @@ function renderStory(atIndex){
     $("choices").innerHTML = ended
       ? `<p class="end-note">Fin de l'histoire. Enregistrez-la dans votre bibliothèque ou commencez une nouvelle aventure.</p>` +
         `<div class="rating-block">${ratingBlockHTML()}</div>` +
-        `<div class="end-actions"><button id="fullBtn" class="primary" type="button">📖 Relire l'histoire en entier</button></div>`
+        `<div class="end-actions"><button id="fullBtn" class="primary" type="button">📖 Relire l'histoire en entier</button><button id="endPdfBtn" class="ghost" type="button">📄 Exporter en PDF</button></div>`
       : page.choices.map((choice,i)=>`<button class="choice" data-choice="${i}"><b>${i+1}.</b>${escapeHtml(cleanText(choice))}</button>`).join("");
     document.querySelectorAll(".choice").forEach((btn,i)=>{
       btn.disabled = generating;
       btn.addEventListener("click",()=>generate(i));
     });
     if ($("fullBtn")) $("fullBtn").addEventListener("click", () => renderFull("readerView"));
+    if ($("endPdfBtn")) $("endPdfBtn").addEventListener("click", () => { renderFull("readerView"); exportPdf(); });
   } else {
     // En relecture : le choix déjà fait est affiché, mais ne peut plus être modifié.
     heading.classList.add("hidden");
