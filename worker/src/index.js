@@ -1224,7 +1224,8 @@ function streamStory(env, input, plan, meta) {
       // Qwen ne diffuse pas correctement en flux : on le demande en une fois (rapide), puis on envoie la page d'un bloc.
       if (/^qwen\//.test(engine.model)) {
         try {
-          const result = await callGroq(env, engine.model, { system, user }, plan.isEnd);
+          // Mode JSON : prompt de génération classique (pas celui du flux, qui demande de la prose).
+          const result = await callGroq(env, engine.model, { system: buildSystemPrompt(input, plan), user: buildUserPrompt(input, plan) }, plan.isEnd);
           const { plan: hiddenPlan, usage, ...visible } = result;
           await send({ t: visible.page });
           let titre = visible.titre;
