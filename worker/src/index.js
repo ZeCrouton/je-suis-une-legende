@@ -1221,6 +1221,22 @@ function streamStory(env, input, plan, meta) {
       const key = `${engine.provider}:${engine.model}`;
       if (isExhausted(key)) continue;
       if (engine.provider === "Gemini" && geminiSlow) continue;
+      // Qwen ne diffuse pas correctement en flux : on le demande en une fois (rapide), puis on envoie la page d'un bloc.
+      if (/^qwen\//.test(engine.model)) {
+        try {
+          const result = await callGroq(env, engine.model, { system, user }, plan.isEnd);
+          const { plan: hiddenPlan, usage, ...visible } = result;
+          await send({ t: visible.page });
+          let titre = visible.titre;
+          if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
+          await send({ done: true, ...visible, titre, ...meta, provider: `${engine.provider} · ${shortModel(engine.model)}`, timing: { firstText: 0, total: Date.now() - t0 }, skipped: errors });
+          return;
+        } catch (e) {
+          errors.push(`${key}: ${e.message}`);
+          if (e.status === 429 || e.status === 413) exhausted.set(key, Date.now() + (e.retryAfter ?? 60) * 1000);
+          continue;
+        }
+      }
       // Gemini n'a que GEMINI_WAIT_MS pour envoyer son premier texte ; sinon on l'abandonne.
       const ac = new AbortController();
       let timer = engine.provider === "Gemini" ? setTimeout(() => ac.abort(), GEMINI_WAIT_MS) : null;
