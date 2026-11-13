@@ -698,7 +698,7 @@ async function callGroq(env, model, prompts, isEnd) {
 }
 
 async function callGemini(env, model, prompts, isEnd, withThinkingConfig = true) {
-  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 2200 };
+  const generationConfig = { responseMimeType: "application/json", temperature: 0.9, maxOutputTokens: 3500 };
   // Réflexion préalable réduite au minimum : réponse beaucoup plus rapide et moins de quota consommé.
   if (withThinkingConfig) {
     generationConfig.thinkingConfig = /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: "low" };
@@ -748,9 +748,9 @@ const sleep = seconds => new Promise(resolve => setTimeout(resolve, seconds * 10
 // Liste ordonnée des moteurs à essayer pour cette requête.
 async function engineChain(env) {
   const chain = [];
-  // Essai : Gemini en premier choix, Groq en secours (pour revenir à l'ordre précédent, inverser ces deux lignes).
-  if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
+  // Groq en premier (plus rapide), Gemini en secours.
   if (env.GROQ_API_KEY) (await groqModels(env)).forEach(model => chain.push({ provider: "Groq", model }));
+  if (env.GEMINI_API_KEY) (await geminiModels(env)).forEach(model => chain.push({ provider: "Gemini", model }));
   return chain;
 }
 
