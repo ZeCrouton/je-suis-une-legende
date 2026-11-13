@@ -73,7 +73,7 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
   .story-card.full-card{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;margin:0!important;color:#000!important}
   #fullTitle{font:700 28pt/1.2 Georgia,"Times New Roman",serif;text-align:center;color:#000!important;margin:8cm 0 .4cm}
   #fullTitle::after{content:"";display:block;width:3cm;height:1px;background:#000;margin:.6cm auto 0}
-  .print-sub{text-align:center;font:italic 12pt Georgia,serif;color:#333!important;margin:.4cm 0 0}
+  #fullSub.print-sub{display:block!important;text-align:center;font:italic 12pt Georgia,serif;color:#333!important;margin:.4cm 0 0}
   #fullText{color:#000!important;font:11.5pt/1.65 Georgia,"Times New Roman",serif;text-align:justify;hyphens:auto}
   #fullText p{margin:0 0 .55em;orphans:3;widows:3}
   .screen-only{display:none!important}
