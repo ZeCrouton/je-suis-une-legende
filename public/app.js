@@ -1,5 +1,5 @@
 // Numéro de version du site (à augmenter à chaque mise à jour, avec le paramètre ?v= dans index.html).
-const APP_VERSION = "1.9";
+const APP_VERSION = "2.0";
 const WORKER_URL = "https://je-suis-une-legende-api.nvzplayforfun.workers.dev";
 const categories = [
   ["Fantasy","🧙"],["Science-fiction","🚀"],["Thriller","🕯️"],["Horreur","🌙"],["Romance","💌"],
@@ -72,6 +72,49 @@ let generating = false;
 const LIVE_WRITING = false;
 
 // choiceIndex : index du choix cliqué sur la dernière page (null pour la première page).
+// BARRE D'ATTENTE : une barre dorée qui avance en continu pendant l'écriture (vite au début, puis de plus en plus lentement,
+// sans jamais atteindre la fin tant que la page n'est pas là), avec un message qui change au fil de l'attente.
+const WAIT_STEPS = [
+  [0, "L'auteur fait glisser sa plume…"],
+  [7, "Les personnages prennent vie…"],
+  [15, "Le décor se met en place…"],
+  [25, "Les dernières lignes s'écrivent…"],
+  [45, "Encore un instant, l'histoire se précise…"]
+];
+function startWait(button) {
+  const text = document.createElement("span");
+  text.className = "wait-text";
+  const bar = document.createElement("span");
+  bar.className = "wait-bar";
+  bar.setAttribute("aria-hidden", "true");
+  button.replaceChildren(text, bar);
+  button.classList.add("is-loading");
+  const started = performance.now();
+  let frame = 0, stopped = false, step = -1;
+  const tick = now => {
+    if (stopped) return;
+    const seconds = (now - started) / 1000;
+    bar.style.width = `${(94 * (1 - Math.exp(-seconds / 11))).toFixed(2)}%`;
+    let i = 0;
+    while (i + 1 < WAIT_STEPS.length && seconds >= WAIT_STEPS[i + 1][0]) i++;
+    if (i !== step) { step = i; text.textContent = WAIT_STEPS[i][1]; }
+    frame = requestAnimationFrame(tick);
+  };
+  frame = requestAnimationFrame(tick);
+  const stop = () => { stopped = true; cancelAnimationFrame(frame); };
+  return {
+    stop,
+    // Succès : la barre se remplit jusqu'au bout avant que la page s'affiche.
+    complete() {
+      stop();
+      bar.style.transition = "width .35s ease-out";
+      bar.style.width = "100%";
+      text.textContent = "La page est écrite ✦";
+      return new Promise(resolve => setTimeout(resolve, 420));
+    }
+  };
+}
+
 async function generate(choiceIndex = null) {
   if (generating) return;
   generating = true;
@@ -96,14 +139,9 @@ async function generate(choiceIndex = null) {
   // Le bouton cliqué affiche un message d'attente à la place de son texte, le temps de la génération.
   const clicked = choiceIndex === null ? $("startBtn") : document.querySelectorAll(".choice")[choiceIndex];
   const originalHTML = clicked ? clicked.innerHTML : "";
-  if (clicked) {
-    // Barre de progression en fond : elle se remplit lentement pour faire patienter (sans jamais atteindre 100 %).
-    clicked.innerHTML = '<span class="wait-text">L\'auteur fait glisser sa plume…</span><span class="wait-bar" aria-hidden="true"></span>';
-    clicked.classList.add("is-loading");
-    const bar = clicked.querySelector(".wait-bar");
-    requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = "92%"; }));
-  }
+  const progress = clicked ? startWait(clicked) : { complete: async () => {}, stop: () => {} };
   const restoreButton = () => {
+    progress.stop();
     if (!clicked) return;
     clicked.innerHTML = originalHTML;
     clicked.classList.remove("is-loading");
@@ -138,7 +176,7 @@ async function generate(choiceIndex = null) {
 
   let lastError = null;
 
-  const applyResult = data => {
+  const applyResult = async data => {
     currentStory.pages.push({
       page: cleanText(data.page),
       choices: data.choices.map(cleanText),
@@ -152,6 +190,7 @@ async function generate(choiceIndex = null) {
     currentStory.totalPages = data.totalPages || currentStory.totalPages;
     currentStory.finished = data.fin === true;
     currentStory.updatedAt = new Date().toISOString();
+    await progress.complete();
     generating = false;
     restoreButton();
     $("startBtn").disabled = false;
@@ -161,7 +200,7 @@ async function generate(choiceIndex = null) {
 
   // D'abord l'écriture en direct, avec la plume ; en cas de souci, génération classique.
   const live = LIVE_WRITING ? await streamPage(body) : null;
-  if (live) { applyResult(live); return; }
+  if (live) { await applyResult(live); return; }
 
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
@@ -197,7 +236,7 @@ async function generate(choiceIndex = null) {
         throw new Error("La réponse reçue est incomplète. Réessaie.");
       }
 
-      applyResult(data);
+      await applyResult(data);
       return;
 
     } catch (error) {

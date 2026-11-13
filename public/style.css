@@ -31,14 +31,17 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .hero-field input:focus{border-color:var(--gold)}
 .hero-field input::placeholder{color:#8792a5}
 .choice:disabled{cursor:wait}
-.is-loading{cursor:wait;animation:pen-pulse 1.5s ease-in-out infinite}
+.is-loading{position:relative;overflow:hidden;cursor:wait}
 .primary.is-loading:disabled,.choice.is-loading:disabled{opacity:1}
-.choice.is-loading{border-color:var(--gold);background:rgba(201,169,110,.16);font-style:italic}
-.is-loading{position:relative;overflow:hidden}
-.wait-text{position:relative;z-index:1}
-.wait-bar{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(201,169,110,.22);transition:width 45s cubic-bezier(.15,.55,.3,1);pointer-events:none}
-@keyframes pen-pulse{0%,100%{opacity:1}50%{opacity:.55}}
-@media (prefers-reduced-motion:reduce){.is-loading{animation:none}}
+.choice.is-loading{border-color:var(--gold);background:rgba(247,241,229,.07);font-style:italic}
+.primary.is-loading{background:#1d2945;color:#f3e9d8;box-shadow:inset 0 0 0 1px rgba(201,169,110,.6),0 8px 24px rgba(0,0,0,.18)}
+.wait-text{position:relative;z-index:1;display:block}
+.wide .wait-text,.primary .wait-text{float:none;font-size:14px;line-height:1.5;text-align:center}
+.choice .wait-text{text-align:left}
+.wait-bar{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none;overflow:hidden;background:linear-gradient(90deg,rgba(201,169,110,.10),rgba(201,169,110,.42));border-right:2px solid rgba(232,200,130,.9);box-shadow:6px 0 18px rgba(232,200,130,.35)}
+.wait-bar::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.22) 50%,transparent 70%);transform:translateX(-100%);animation:wait-shimmer 1.8s ease-in-out infinite}
+@keyframes wait-shimmer{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.wait-bar::after{animation:none;display:none}}
 .locked-choice{text-align:center;color:#e0bf78;font-style:italic;line-height:1.6}
 .locked-choice span{color:#9a958c;font-size:13px}
 
