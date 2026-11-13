@@ -95,3 +95,9 @@ footer{text-align:center;padding:22px;color:#78869c;font:11px Arial,sans-serif;b
 .engine-dot.dot-gemini{background:#ffffff;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
 .engine-dot.dot-groq{background:#e5484d;box-shadow:0 0 0 1px rgba(229,72,77,.35)}
 .engine-dot.dot-hidden{display:none}
+
+/* Emplacement réservé : le formulaire ne bouge pas quand le bouton se détache. */
+.start-slot{min-height:76px}
+/* Pendant la génération, le bouton « Commencer » reste collé en bas de l'écran ; le reste de la page reste scrollable. */
+#startBtn.is-loading{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100% - 32px),520px);margin:0;z-index:50;box-shadow:inset 0 0 0 1px rgba(201,169,110,.6),0 10px 30px rgba(0,0,0,.45)}
+body:has(#startBtn.is-loading) .shell{padding-bottom:120px}
