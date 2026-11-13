@@ -808,8 +808,8 @@ function geminiRank(name) {
   const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
   const lite = /lite/.test(name) ? 1 : 0;
   const preview = /preview|latest/.test(name) ? 1 : 0;
-  // Le plus rapide d'abord : 2.5 Flash-Lite (sans réflexion), puis 2.5 Flash, puis la série 3.
-  const fast = /^gemini-2\.5-flash-lite$/.test(name) ? 0 : /^gemini-2\.5-flash$/.test(name) ? 1 : 2;
+  // Le plus rapide d'abord : Flash-Lite (la version la plus récente en tête), puis 2.5 Flash, puis le reste.
+  const fast = lite ? 0 : /^gemini-2\.5-flash$/.test(name) ? 1 : 2;
   return [fast, -version, lite, preview, name.length];
 }
 
@@ -975,6 +975,11 @@ async function generateWithFallback(env, input, plan) {
         errors.push(`${engine.provider} ${engine.model}: ${e.message}${e.apiMessage ? ` (${e.apiMessage})` : ""}`);
         // Visible dans Workers Logs : pourquoi un modèle a été écarté.
         console.log(`[engine] ${key} · ${e.status ?? "sans statut"} · ${e.apiMessage || e.message}`);
+        // Modèle retiré (404) : on le met de côté pour plusieurs heures au lieu de le retenter à chaque génération.
+        if (e.status === 404) {
+          exhausted.set(key, Date.now() + 6 * 3600 * 1000);
+          return kept ? { ...kept, provider: `${engine.provider} · ${shortModel(engine.model)}` } : null;
+        }
         // Requête trop grosse pour ce modèle : une page d'historique en moins.
         if (e.status === 413 && maxPages > 1) { maxPages--; continue; }
         // Quota atteint : ce modèle est mis de côté jusqu'à la fin du délai, on passe au suivant.
@@ -1231,7 +1236,7 @@ export default {
       // Diagnostic : /health?check=gemini fait un appel minuscule à Gemini et renvoie le statut exact (sans jamais afficher la clé).
       if (url.searchParams.get("check") === "gemini" && env.GEMINI_API_KEY) {
         try {
-          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`, {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${(await geminiModels(env))[0]}:generateContent?key=${env.GEMINI_API_KEY}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Réponds OK." }] }], generationConfig: { maxOutputTokens: 5 } })
