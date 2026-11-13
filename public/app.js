@@ -138,12 +138,10 @@ async function generate(choiceIndex = null) {
     restoreButton();
     $("startBtn").disabled = false;
     renderStory();
-    // TEMPORAIRE (diagnostic de lenteur) : moteur utilisé et durée réelle.
-    $("providerNote").textContent = `Diagnostic : ${data.provider || "?"} · ${Math.round((Date.now() - t0) / 1000)} s`;
+    $("providerNote").textContent = "Histoire enregistrée sur cet appareil";
   };
 
   // D'abord l'écriture en direct, avec la plume ; en cas de souci, génération classique.
-  const t0 = Date.now();
   const live = LIVE_WRITING ? await streamPage(body) : null;
   if (live) { applyResult(live); return; }
 
