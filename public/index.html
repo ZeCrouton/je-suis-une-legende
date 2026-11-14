@@ -6,6 +6,12 @@
   <meta name="theme-color" content="#10182d">
   <title>Je suis une légende</title>
   <link rel="stylesheet" href="style.css?v=2.5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#c9a96e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Je suis une légende">
 </head>
 <body>
   <header class="topbar">
@@ -14,7 +20,8 @@
   </header>
   <main class="shell">
     <section id="homeView">
-      <button id="aboutBtn" type="button" class="ghost about-btn" aria-expanded="false" aria-controls="aboutPanel">❓ Je suis une légende, c'est quoi ?</button>
+      <button id="addHomeBtn" type="button" class="ghost hidden">📲 Ajouter à l'écran d'accueil</button>
+<button id="aboutBtn" type="button" class="ghost about-btn" aria-expanded="false" aria-controls="aboutPanel">❓ Je suis une légende, c'est quoi ?</button>
       <section id="aboutPanel" class="panel about hidden" aria-labelledby="aboutTitle">
         <h2 id="aboutTitle">Je suis une légende, c'est quoi ?</h2>
         <p>Je suis une légende est un roman dont vous êtes le héros. Choisissez un univers (fantasy, thriller, romance, conte pour enfant…), ajoutez si vous le souhaitez une idée de départ, puis laissez l'histoire commencer.</p>
@@ -89,5 +96,23 @@
   </main>
   <footer>Je suis une légende <span>·</span> Des histoires infinies. Des destins uniques.<div id="versionLine" class="version-line"></div></footer>
   <script src="app.js?v=2.5"></script>
+<script>
+(function(){
+  var btn = document.getElementById('addHomeBtn');
+  if (!btn) return;
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (standalone) return;
+  function show(v){ btn.hidden = !v; btn.classList.toggle('hidden', !v); }
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred = e; show(true); });
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) show(true);
+  window.addEventListener('appinstalled', function(){ show(false); });
+  btn.addEventListener('click', function(){
+    if (deferred) { deferred.prompt(); deferred.userChoice.then(function(){ deferred = null; show(false); }); }
+    else { btn.textContent = "Sur iPhone : Partager ⬆︎ puis « Sur l'écran d'accueil »"; }
+  });
+})();
+</script>
 </body>
 </html>
