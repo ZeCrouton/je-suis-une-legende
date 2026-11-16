@@ -759,20 +759,12 @@ function parseOutput(raw, isEnd) {
 // d'une famille gratuite est pris en compte).
 // ---------------------------------------------------------------------------
 
-// Groq : par ordre de préférence. Sur le plan Free, tous les modèles sont gratuits.
-const GROQ_PREFERENCES = [
-  /^openai\/gpt-oss-120b$/,
-  /^openai\/gpt-oss-20b$/,
-  /^qwen\/qwen3[\w.-]*$/,
-  /^llama-3\.3-70b-versatile$/,
-  /^meta-llama\/llama-4-(maverick|scout)[\w.-]*$/
-];
-const GROQ_DEFAULTS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-
-// Gemini : uniquement les familles Flash et Flash-Lite, qui ont un niveau gratuit.
-// Exclus : Pro, modèles d'image, de son, de vidéo, « Omni » et expérimentaux (payants ou très limités).
-const GEMINI_EXCLUDE = /(pro|image|tts|audio|live|embedding|omni|computer|veo|imagen|lyria|exp|thinking)/i;
-const GEMINI_DEFAULTS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+// LISTE BLANCHE STRICTE : identifiants exacts uniquement. Aucun modèle n'est ajouté
+// automatiquement à partir de l'API d'un fournisseur : un nouveau modèle doit être ajouté
+// ici à la main, après vérification de son niveau gratuit sur la page officielle du fournisseur.
+// Ordre de préférence : Gemini d'abord (Flash, puis Flash-Lite), puis Groq.
+const GEMINI_ALLOWED = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const GROQ_ALLOWED = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 
 const MODEL_LIST_TTL_MS = 6 * 3600 * 1000;
 const modelCache = { groq: null, gemini: null };   // { at, list }
@@ -787,30 +779,18 @@ function isExhausted(key) {
 
 async function groqModels(env) {
   if (modelCache.groq && Date.now() - modelCache.groq.at < MODEL_LIST_TTL_MS) return modelCache.groq.list;
-  let list = GROQ_DEFAULTS;
+  let list = GROQ_ALLOWED;
   try {
     const r = await fetch("https://api.groq.com/openai/v1/models", { headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}` } });
     if (r.ok) {
-      const ids = ((await r.json()).data || []).filter(m => m.active !== false).map(m => m.id);
-      const ordered = [];
-      for (const pattern of GROQ_PREFERENCES) {
-        ids.filter(id => pattern.test(id)).sort().reverse().forEach(id => { if (!ordered.includes(id)) ordered.push(id); });
-      }
-      if (ordered.length) list = ordered;
+      const active = new Set(((await r.json()).data || []).filter(m => m.active !== false).map(m => m.id));
+      // On ne garde que les modèles autorisés ET présents : jamais un modèle inconnu.
+      const available = GROQ_ALLOWED.filter(id => active.has(id));
+      if (available.length) list = available;
     }
-  } catch { /* liste par défaut */ }
+  } catch { /* liste blanche par défaut */ }
   modelCache.groq = { at: Date.now(), list };
   return list;
-}
-
-// Trie les modèles Gemini : version la plus récente d'abord, Flash avant Flash-Lite, stable avant preview.
-function geminiRank(name) {
-  const version = Number.parseFloat((name.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
-  const lite = /lite/.test(name) ? 1 : 0;
-  const preview = /preview|latest/.test(name) ? 1 : 0;
-  // Qualité d'abord : Flash complet (la version la plus récente en tête), puis les Flash-Lite en secours.
-  const fast = lite ? 1 : 0;
-  return [fast, -version, lite, preview, name.length];
 }
 
 // Retourne la liste des clés Gemini disponibles (GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3…)
@@ -824,27 +804,19 @@ function geminiKeys(env) {
 
 async function geminiModels(env) {
   if (modelCache.gemini && Date.now() - modelCache.gemini.at < MODEL_LIST_TTL_MS) return modelCache.gemini.list;
-  // On utilise la première clé pour lister les modèles (la liste est identique pour tous les comptes).
   const key = geminiKeys(env)[0];
-  if (!key) return GEMINI_DEFAULTS;
-  let list = GEMINI_DEFAULTS;
+  if (!key) return GEMINI_ALLOWED;
+  let list = GEMINI_ALLOWED;
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${key}`);
     if (r.ok) {
-      const names = ((await r.json()).models || [])
+      const names = new Set(((await r.json()).models || [])
         .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
-        .map(m => String(m.name).replace(/^models\//, ""))
-        .filter(n => /^gemini-[\d.]+-flash/.test(n) && !GEMINI_EXCLUDE.test(n))
-        // Une seule version datée par famille : on préfère le nom court (alias stable).
-        .filter(n => !/-\d{3}$|-\d{2}-\d{4}$/.test(n));
-      names.sort((a, b) => {
-        const ra = geminiRank(a), rb = geminiRank(b);
-        for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] < rb[i] ? -1 : 1;
-        return 0;
-      });
-      if (names.length) list = names.slice(0, 4);
+        .map(m => String(m.name).replace(/^models\//, "")));
+      const available = GEMINI_ALLOWED.filter(n => names.has(n));
+      if (available.length) list = available;
     }
-  } catch { /* liste par défaut */ }
+  } catch { /* liste blanche par défaut */ }
   modelCache.gemini = { at: Date.now(), list };
   return list;
 }
@@ -992,9 +964,7 @@ function shortModel(model) {
 // dès qu'un quota est atteint ou qu'un modèle ne répond pas correctement.
 async function generateWithFallback(env, input, plan) {
   const system = buildSystemPrompt(input, plan);
-  let chain = await engineChain(env);
-  // TEMPORAIRE (comparaison de modèles) : un seul moteur demandé, sans secours.
-  if (input.engine) chain = chain.filter(e => `${e.provider}:${e.model}` === input.engine);
+  const chain = await engineChain(env);
   const errors = [];
   const quotaWaits = [];
   let lastLimit = null;
@@ -1312,27 +1282,47 @@ function streamStory(env, input, plan, meta) {
   });
 }
 
+// GARDE-FOUS SERVEUR. Chaque requête valide = une page générée.
+// - Interrupteur d'urgence : GENERATION_ENABLED = "false" coupe toute génération.
+// - Plafond quotidien global (DAILY_LIMIT) et plafond par adresse IP (IP_DAILY_LIMIT).
+// - Fermé par défaut : sans liaison KV « USAGE », aucune génération n'est lancée.
+// Limite connue : KV n'est pas atomique, donc sous forte charge simultanée le plafond
+// peut être dépassé de quelques requêtes. Pour un plafond exact, utiliser un Durable Object.
+async function guard(request, env) {
+  if (env.GENERATION_ENABLED !== "true") {
+    return json({ error: "La génération est suspendue pour le moment." }, 503);
+  }
+  if (!env.USAGE) {
+    return json({ error: "Garde-fou non configuré : liaison KV « USAGE » manquante." }, 503);
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  const ip = request.headers.get("CF-Connecting-IP") || "inconnue";
+  const globalLimit = Number.parseInt(env.DAILY_LIMIT, 10) || 300;
+  const ipLimit = Number.parseInt(env.IP_DAILY_LIMIT, 10) || 40;
+  const globalKey = `jour:${day}`;
+  const ipKey = `ip:${day}:${ip}`;
+  const [g, i] = await Promise.all([env.USAGE.get(globalKey), env.USAGE.get(ipKey)]);
+  const globalUsed = Number.parseInt(g, 10) || 0;
+  const ipUsed = Number.parseInt(i, 10) || 0;
+  if (globalUsed >= globalLimit) {
+    return json({ error: "La limite quotidienne de générations est atteinte. Réessayez demain." }, 429);
+  }
+  if (ipUsed >= ipLimit) {
+    return json({ error: "Trop de générations depuis cette connexion aujourd'hui. Réessayez demain." }, 429);
+  }
+  const ttl = 2 * 86400;
+  await Promise.all([
+    env.USAGE.put(globalKey, String(globalUsed + 1), { expirationTtl: ttl }),
+    env.USAGE.put(ipKey, String(ipUsed + 1), { expirationTtl: ttl })
+  ]);
+  return null;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
     const url = new URL(request.url);
     if (url.pathname === "/health") {
-      // Diagnostic : /health?check=gemini fait un appel minuscule à Gemini et renvoie le statut exact (sans jamais afficher la clé).
-      if (url.searchParams.get("check") === "gemini" && env.GEMINI_API_KEY) {
-        try {
-          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${(await geminiModels(env))[0]}:generateContent?key=${env.GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Réponds OK." }] }], generationConfig: { maxOutputTokens: 5 } })
-          });
-          const body = await r.text();
-          let message = body;
-          try { message = JSON.parse(body)?.error?.message || body; } catch { /* texte brut */ }
-          return json({ gemini: { status: r.status, ok: r.ok, message: String(message).slice(0, 300) } });
-        } catch (e) {
-          return json({ gemini: { status: "réseau", message: String(e.message || e).slice(0, 300) } });
-        }
-      }
       return json({ ok: true, freeOnly: env.FREE_ONLY === "true", groq: !!env.GROQ_API_KEY, gemini: !!env.GEMINI_API_KEY });
     }
     if (url.pathname !== "/api/story" || request.method !== "POST") return json({ error: "Not found" }, 404);
@@ -1344,22 +1334,19 @@ export default {
     if (!CATEGORIES.has(input.category)) return json({ error: "Catégorie inconnue." }, 400);
     if (JSON.stringify(input).length > MAX_BODY_CHARS) return json({ error: "Contexte trop volumineux." }, 413);
 
+    const gate = await guard(request, env);
+    if (gate) return gate;
     const plan = planPage(input);
-    // TEMPORAIRE : liste des moteurs disponibles, pour la comparaison.
-    if (input.engine === "list") return json({ chain: (await engineChain(env)).map(e => `${e.provider}:${e.model}`) });
-    const debug = input.debug === "compare";
     const meta = { fin: plan.isEnd, pageNumber: plan.pageNumber, totalPages: plan.total };
-    if (input.stream === true && !input.engine && !debug) return streamStory(env, input, plan, meta);
+    if (input.stream === true) return streamStory(env, input, plan, meta);
     const outcome = await generateWithFallback(env, input, plan);
 
     if (outcome.result) {
       const { plan: hiddenPlan, usage, ...visible } = outcome.result;
       let titre = visible.titre;
       if (!titre) titre = await requestTitle(env, input.category, visible.page, visible.memoire).catch(() => "");
-      const extra = debug ? { debug: { recette: recipeFor(input, plan), plan: hiddenPlan, usage } } : {};
-      return json({ ...visible, titre, ...meta, ...extra });
+      return json({ ...visible, titre, ...meta });
     }
-    if (debug) return json({ error: "échec", details: outcome.errors, retryAfter: outcome.retryAfter ?? null }, 502);
 
     const retryAfter = outcome.quota ? outcome.retryAfter : 2;
     let error = "Les moteurs gratuits sont temporairement indisponibles. Aucune génération payante n'a été tentée.";

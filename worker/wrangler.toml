@@ -3,4 +3,17 @@ main = "src/index.js"
 compatibility_date = "2026-11-12"
 
 [vars]
+# Mode gratuit strict : refuse la génération si désactivé.
 FREE_ONLY = "true"
+# Interrupteur d'urgence : mettre "false" pour suspendre toute génération.
+GENERATION_ENABLED = "true"
+# Plafond de pages générées par jour (tous visiteurs confondus) et par adresse IP.
+DAILY_LIMIT = "300"
+IP_DAILY_LIMIT = "40"
+
+# Stockage des compteurs. Créer le namespace puis reporter son identifiant :
+#   npx wrangler kv namespace create USAGE
+# Tant que l'identifiant n'est pas remplacé, le déploiement échoue volontairement.
+[[kv_namespaces]]
+binding = "USAGE"
+id = "REMPLACER_PAR_L_ID_DU_NAMESPACE_KV"
