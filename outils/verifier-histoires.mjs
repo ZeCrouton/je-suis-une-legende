@@ -153,6 +153,10 @@ function verifier(chemin) {
     }
   }
 
+  // Le héros doit être désigné par {prenom} : une histoire sans ce marqueur porte un prénom figé.
+  const avecPrenom = histoire.pages.some(p => typeof p.texte === "string" && p.texte.includes(MARQUEUR_AUTORISE));
+  if (!avecPrenom) err(`aucun marqueur ${MARQUEUR_AUTORISE} : le héros ne peut pas être personnalisé (prénom figé dans le texte ?)`);
+
   if (fins.length < 2 || fins.length > 3) err(`nombre de fins : ${fins.length} (attendu 2 ou 3)`);
 
   // Pages inaccessibles depuis p1.
