@@ -1,0 +1,204 @@
+{
+  "id": "exemple-invalide-01",
+  "genre": "Policier",
+  "public": "adultes",
+  "titre": "La clef de la rue Sainte-Anne",
+  "pages": [
+    {
+      "id": "p1",
+      "texte": "{prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente.",
+      "choix": [
+        {
+          "libelle": "Descendre vers la cave sombre",
+          "va_vers": "p2"
+        },
+        {
+          "libelle": "Rester près de la fenêtre ouverte",
+          "va_vers": "p99"
+        }
+      ]
+    },
+    {
+      "id": "p2",
+      "texte": "Bonjour {nom}, [note de l'auteur] ...",
+      "choix": [
+        {
+          "libelle": "Ouvrir la lettre devant tout le monde",
+          "va_vers": "p4"
+        },
+        {
+          "libelle": "Garder la lettre cachée dans sa poche",
+          "va_vers": "p5"
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "texte": "Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu.",
+      "choix": [
+        {
+          "libelle": "Suivre le vieil homme dans la rue",
+          "va_vers": "p5"
+        },
+        {
+          "libelle": "Frapper à la porte du voisin",
+          "va_vers": "p6"
+        }
+      ]
+    },
+    {
+      "id": "p4",
+      "texte": "Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles.",
+      "choix": [
+        {
+          "libelle": "Fouiller le coffre sous l'escalier",
+          "va_vers": "p7"
+        },
+        {
+          "libelle": "Interroger la femme près du feu",
+          "va_vers": "p8"
+        }
+      ]
+    },
+    {
+      "id": "p5",
+      "texte": "La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur.",
+      "choix": [
+        {
+          "libelle": "Emprunter le passage vers le port",
+          "va_vers": "p7"
+        },
+        {
+          "libelle": "Attendre le retour de la nuit",
+          "va_vers": "p8"
+        }
+      ]
+    },
+    {
+      "id": "p6",
+      "texte": "La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant.",
+      "choix": [
+        {
+          "libelle": "Rendre la clef à son propriétaire",
+          "va_vers": "p8"
+        },
+        {
+          "libelle": "Garder la clef et partir seul",
+          "va_vers": "p9"
+        }
+      ]
+    },
+    {
+      "id": "p7",
+      "texte": "Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu.",
+      "choix": [
+        {
+          "libelle": "Déchiffrer les marques sur le mur",
+          "va_vers": "p10"
+        },
+        {
+          "libelle": "Appeler la garde du quartier",
+          "va_vers": "p11"
+        }
+      ]
+    },
+    {
+      "id": "p8",
+      "texte": "Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement.",
+      "choix": [
+        {
+          "libelle": "Accepter l'aide d'un inconnu",
+          "va_vers": "p10"
+        },
+        {
+          "libelle": "Refuser et continuer seul",
+          "va_vers": "p11"
+        }
+      ]
+    },
+    {
+      "id": "p9",
+      "texte": "Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr.",
+      "choix": [
+        {
+          "libelle": "Brûler la carte avant qu'il ne soit trop tard",
+          "va_vers": "p10"
+        },
+        {
+          "libelle": "Cacher la carte dans la doublure",
+          "va_vers": "p11"
+        }
+      ]
+    },
+    {
+      "id": "p10",
+      "texte": "La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre.",
+      "choix": [
+        {
+          "libelle": "Répondre aux menaces avec calme",
+          "va_vers": "p12"
+        },
+        {
+          "libelle": "Fuir par les toits humides",
+          "va_vers": "p13"
+        }
+      ]
+    },
+    {
+      "id": "p11",
+      "texte": "Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu.",
+      "choix": [
+        {
+          "libelle": "Faire confiance au messager",
+          "va_vers": "p12"
+        },
+        {
+          "libelle": "Décider de couper tout lien",
+          "va_vers": "p13"
+        }
+      ]
+    },
+    {
+      "id": "p12",
+      "texte": "Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Il reste peu de temps avant l'aube, et chaque minute compte plus que la précédente. La porte grince sous la main de {prenom}, et l'air froid du couloir monte jusqu'aux chevilles. Le vieil homme parle à voix basse, les yeux fixés sur les mains tremblantes de {prenom}. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre.",
+      "choix": [
+        {
+          "libelle": "Affronter l'homme au manteau gris",
+          "va_vers": "p14"
+        },
+        {
+          "libelle": "Chercher une sortie par la cour",
+          "va_vers": "p15"
+        }
+      ]
+    },
+    {
+      "id": "p13",
+      "texte": "Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. {prenom} se souvient de la lettre cachée dans la reliure, celle que personne ne devait lire. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur.",
+      "choix": [
+        {
+          "libelle": "Révéler le secret à la foule",
+          "va_vers": "p14"
+        },
+        {
+          "libelle": "Taire la vérité pour protéger l'enfant",
+          "va_vers": "p15"
+        }
+      ]
+    },
+    {
+      "id": "p14",
+      "texte": "Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. La voix de la femme se brise quand elle murmure le nom d'un enfant disparu. Les cartes étalées montrent trois chemins possibles, dont aucun ne paraît sûr. Dehors, la pluie tambourine sur les vitres et couvre les pas qui approchent lentement. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Sur le bureau traîne une clef ancienne, couverte de rouille, qui ne ressemble à aucune autre. Une lampe à huile tremble sur la table, projetant des ombres qui semblent glisser vers le mur. Un bruit sec résonne dans l'escalier, puis le silence retombe, plus lourd qu'avant.",
+      "choix": [
+        {
+          "libelle": "Ouvrir la dernière porte du couloir",
+          "va_vers": "p16"
+        },
+        {
+          "libelle": "Revenir sur ses pas sans bruit",
+          "va_vers": "p17"
+        }
+      ]
+    }
+  ]
+}
