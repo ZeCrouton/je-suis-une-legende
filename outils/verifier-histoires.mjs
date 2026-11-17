@@ -142,6 +142,9 @@ function verifier(chemin) {
       err(`${ref} : il faut exactement deux choix`);
       continue;
     }
+    if (page.choix[0].va_vers === page.choix[1].va_vers) {
+      err(`${ref} : les deux choix mènent à la même page « ${page.choix[0].va_vers} » (choix sans conséquence)`);
+    }
     for (const c of page.choix) {
       if (!c.libelle || !c.libelle.trim()) err(`${ref} : choix sans libellé`);
       else {
