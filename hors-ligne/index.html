@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10182d">
+  <title>Je suis une légende</title>
+  <link rel="stylesheet" href="style.css?v=2.5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#c9a96e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Je suis une légende">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Je suis une légende, accueil"><span class="brand-mark">✦</span> Je suis une légende</a>
+    <div class="top-actions"><button id="libraryBtn" class="ghost">Ma bibliothèque <span id="savedCount">0</span></button></div>
+  </header>
+  <main class="shell">
+    <section id="homeView">
+      <button id="addHomeBtn" type="button" class="ghost hidden">📲 Ajouter à l'écran d'accueil</button>
+<button id="aboutBtn" type="button" class="ghost about-btn" aria-expanded="false" aria-controls="aboutPanel">❓ Je suis une légende, c'est quoi ?</button>
+      <section id="aboutPanel" class="panel about hidden" aria-labelledby="aboutTitle">
+        <h2 id="aboutTitle">Je suis une légende, c'est quoi ?</h2>
+        <p>Je suis une légende est un roman dont vous êtes le héros. Choisissez un univers (fantasy, thriller, romance, conte pour enfant…), ajoutez si vous le souhaitez une idée de départ, puis laissez l'histoire commencer.</p>
+        <p>À chaque page, deux choix vous sont proposés : ce que vous décidez change la suite du récit, et l'histoire s'écrit au fil de vos décisions. Elle se termine au bout de 10 pages (7 pour les contes).</p>
+        <p>Vous pouvez devenir le héros en indiquant votre prénom, relire les pages précédentes sans changer vos choix, écouter le récit à voix haute et enregistrer vos histoires dans votre bibliothèque. Elles sont conservées sur votre appareil, et l'histoire en cours se retrouve même si vous rechargez la page.</p>
+        <p>Chaque roman est écrit en direct par l'un de nos deux auteurs. <strong>Le talentueux</strong> signe les pages les plus soignées — regardez la pastille blanche <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.35);vertical-align:middle"></span> en bas de page pour le reconnaître. <strong>L'apprenti</strong> intervient quand son collègue est pris, et se signale par une pastille rouge <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#e5484d;box-shadow:0 0 0 1px rgba(229,72,77,.35);vertical-align:middle"></span>. Le résultat dépend de leur agenda du moment.</p>
+        <button id="aboutClose" type="button" class="ghost">Fermer</button>
+      </section>
+      <button id="resumeBtn" class="ghost resume hidden"></button>
+      <div class="hero">
+        <div class="eyebrow">VOTRE IMAGINATION, VOTRE HISTOIRE</div>
+        <h1>Chaque choix ouvre<br><em>un nouveau monde.</em></h1>
+        <p>Choisissez un univers, laissez l'histoire commencer et décidez de la suite.</p>
+      </div>
+      <section class="setup panel">
+        <div class="section-heading"><span class="step">01</span><div><h2>Choisissez votre univers</h2><p>Quel genre d'histoire avez-vous envie de vivre ?</p></div></div>
+        <div id="categories" class="categories"></div>
+        <div id="childOptions" class="child-options hidden">
+          <label for="ageSelect">Âge du jeune lecteur</label>
+          <select id="ageSelect"><option>3–5 ans</option><option selected>6–8 ans</option><option>9–12 ans</option></select>
+        </div>
+        <label class="field-label" for="seed">Une idée de départ (facultatif)</label>
+        <textarea id="seed" rows="2" placeholder="Ex. : Une jeune exploratrice découvre une île qui n'apparaît sur aucune carte…"></textarea>
+        <div class="hero-option">
+          <button id="heroToggle" type="button" class="ghost hero-toggle" aria-pressed="false" aria-controls="heroField">🦸 Je veux être le héros du roman</button>
+          <div id="heroField" class="hero-field hidden">
+            <label for="heroName">Quel est votre prénom ?</label>
+            <input id="heroName" type="text" maxlength="30" autocomplete="given-name" placeholder="Ex. : Léa">
+          </div>
+        </div>
+        <div class="start-slot"><button id="startBtn" class="primary wide">Commencer l'aventure <span>→</span></button></div>
+        <p class="fineprint">Une page à la fois · Deux choix · Une histoire qui vous ressemble</p>
+        <div id="noteSlotHome"></div>
+      </section>
+    </section>
+
+    <section id="readerView" class="hidden">
+      <div class="reader-head"><button id="backBtn" class="ghost">← Accueil</button><div><span id="genreTag" class="genre-tag"></span><span id="pageCount" class="page-count"></span></div><div class="reader-actions"><button id="readBtn" class="ghost" aria-pressed="false">🔊 Écouter</button><button id="saveBtn" class="ghost">♡ Enregistrer</button></div></div>
+      <div id="readMenu" class="read-menu hidden"><button class="ghost" data-read="page">Cette page</button><button class="ghost" data-read="all">Tout le récit</button></div>
+      <article class="story-card">
+        <div class="story-kicker">VOTRE HISTOIRE</div>
+        <h2 id="storyTitle">Une nouvelle aventure</h2>
+        <div id="storyText" class="story-text"></div>
+        <div class="story-footer"><span>✦</span><span id="storyFooterText">À vous de décider…</span><span>✦</span></div>
+      </article>
+      <nav class="review-row" aria-label="Relire les pages"><button id="prevBtn" class="ghost hidden">← Page précédente</button><button id="nextBtn" class="ghost hidden">Page suivante →</button><button id="currentBtn" class="ghost hidden">⤓ Page en cours</button></nav>
+      <section class="choices-wrap"><h3>Que choisissez-vous ?</h3><div id="choices" class="choices"></div></section>
+      <div id="noteSlotReader">
+        <p id="providerNote" class="provider-note"></p>
+        <span id="engineDot" class="engine-dot dot-hidden" aria-hidden="true"></span>
+        <p id="errorBox" class="error hidden" role="alert"></p>
+      </div>
+    </section>
+
+    <section id="fullView" class="hidden">
+      <div class="reader-head"><button id="fullBack" class="ghost">← Retour</button><div><span id="fullTag" class="genre-tag"></span><span id="fullCount" class="page-count"></span></div><div class="reader-actions"></div></div>
+      <article class="story-card full-card">
+        <div class="story-kicker">VOTRE HISTOIRE EN ENTIER</div>
+        <h2 id="fullTitle"></h2>
+        <p id="fullSub" class="print-only print-sub"></p>
+        <div id="fullText" class="story-text"></div>
+        <div class="story-footer"><span>✦</span><span id="fullFooter"></span><span>✦</span></div>
+      </article>
+      <div id="fullRating" class="rating-block"></div>
+      <div id="fullActions" class="full-actions"></div>
+    </section>
+
+    <section id="libraryView" class="hidden">
+      <div class="library-head"><button id="libraryBack" class="ghost">← Retour</button><div><div class="eyebrow">VOS AVENTURES</div><h1>Ma bibliothèque</h1></div></div>
+      <div id="libraryList" class="library-list"></div>
+    </section>
+  </main>
+  <footer>Je suis une légende <span>·</span> Des histoires infinies. Des destins uniques.<div id="versionLine" class="version-line"></div></footer>
+  <script src="app.js?v=2.5"></script>
+<script>
+(function(){
+  var btn = document.getElementById('addHomeBtn');
+  if (!btn) return;
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (standalone) return;
+  function show(v){ btn.hidden = !v; btn.classList.toggle('hidden', !v); }
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred = e; show(true); });
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) show(true);
+  window.addEventListener('appinstalled', function(){ show(false); });
+  btn.addEventListener('click', function(){
+    if (deferred) { deferred.prompt(); deferred.userChoice.then(function(){ deferred = null; show(false); }); }
+    else { btn.textContent = "Sur iPhone : Partager ⬆︎ puis « Sur l'écran d'accueil »"; }
+  });
+})();
+</script>
+</body>
+</html>
